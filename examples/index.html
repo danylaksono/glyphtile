@@ -188,6 +188,8 @@
                 </div>
                 <label for="enabled">Enable Grid:</label>
                 <input type="checkbox" id="enabled" checked>
+                <label for="showPoints" style="margin-top:10px; display:block;">Show Points:</label>
+                <input type="checkbox" id="showPoints">
             </div>
             
             <div class="control-group">
@@ -225,6 +227,12 @@
             
             <div class="control-group" id="basemapControls">
                 <h3>Basemap</h3>
+                <label for="basemapStyle">Basemap Style:</label>
+                <select id="basemapStyle">
+                    <option value="osm">OpenStreetMap (Raster)</option>
+                    <option value="positron">Carto Positron (Light)</option>
+                    <option value="dark">Carto Dark Matter</option>
+                </select>
                 <label for="basemapOpacity">Basemap Opacity:</label>
                 <input type="range" id="basemapOpacity" min="0" max="100" value="100" step="5">
                 <span id="basemapOpacityValue">100%</span>
@@ -367,6 +375,11 @@
         const previewCanvas = document.getElementById('previewCanvas');
         const basemapOpacitySlider = document.getElementById('basemapOpacity');
         const basemapOpacityValue = document.getElementById('basemapOpacityValue');
+        const showPointsCheckbox = document.getElementById('showPoints');
+        const basemapStyleSelect = document.getElementById('basemapStyle');
+
+        const POINTS_SOURCE_ID = 'points-source';
+        const POINTS_LAYER_ID = 'points-layer';
         
         // Info display elements
         const pointCountSpan = document.getElementById('pointCount');
@@ -577,13 +590,19 @@
             const val = parseInt(e.target.value, 10);
             basemapOpacityValue.textContent = `${val}%`;
             const opacity = val / 100;
-            if (map.getLayer('osm')) {
-                map.setPaintProperty('osm', 'raster-opacity', opacity);
-            }
+            setBasemapOpacity(opacity);
         });
         
         dataSourceSelect.addEventListener('change', (e) => {
             loadData();
+        });
+
+        showPointsCheckbox.addEventListener('change', () => {
+            updatePointsLayer();
+        });
+
+        basemapStyleSelect.addEventListener('change', () => {
+            switchBasemap(basemapStyleSelect.value);
         });
         
         colorModeBtn.addEventListener('click', () => {
@@ -653,6 +672,7 @@
 
                 pointCountSpan.textContent = currentData.length;
                 createGridLayer();
+                updatePointsLayer();
                 
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -670,7 +690,7 @@
             
             console.log('Creating grid layer with', currentData.length, 'data points');
             
-            if (gridLayer) {
+            if (gridLayer && map.getLayer(gridLayer.id)) {
                 console.log('Removing existing layer:', gridLayer.id);
                 map.removeLayer(gridLayer.id);
             }
@@ -770,6 +790,11 @@
             console.log('Adding layer to map:', gridLayer.id);
             map.addLayer(gridLayer);
             console.log('Layer added successfully');
+
+            // Ensure points layer (if present) is rendered below the grid
+            if (map.getLayer(POINTS_LAYER_ID)) {
+                map.moveLayer(POINTS_LAYER_ID, gridLayer.id);
+            }
         }
         
         function updateGridLayer() {
@@ -784,9 +809,7 @@
             updateGlyphPreview();
             // Initialize basemap opacity from slider
             const initialOpacity = parseInt(basemapOpacitySlider.value, 10) / 100;
-            if (map.getLayer('osm')) {
-                map.setPaintProperty('osm', 'raster-opacity', initialOpacity);
-            }
+            setBasemapOpacity(initialOpacity);
             loadData();
         });
         
@@ -795,6 +818,175 @@
             showStatus('Map error occurred', 'error');
             hideLoading();
         });
+
+        // Helper: convert current data to GeoJSON FeatureCollection
+        function buildGeoJSONFromData() {
+            if (!currentData) return null;
+
+            let getPosition;
+            switch (dataSourceSelect.value) {
+                case 'sf-bike':
+                case 'sf-restaurants':
+                    getPosition = (d) => d.COORDINATES;
+                    break;
+                case 'nyc-taxis':
+                    getPosition = (d) => [d.pickup_longitude, d.pickup_latitude];
+                    break;
+                default:
+                    getPosition = () => null;
+            }
+
+            return {
+                type: 'FeatureCollection',
+                features: currentData.map((d) => {
+                    const p = getPosition(d);
+                    return {
+                        type: 'Feature',
+                        geometry: { type: 'Point', coordinates: p },
+                        properties: d
+                    };
+                }).filter(f => Array.isArray(f.geometry.coordinates) && f.geometry.coordinates.length === 2)
+            };
+        }
+
+        // Points layer management
+        function updatePointsLayer() {
+            const shouldShow = showPointsCheckbox.checked;
+
+            if (!shouldShow) {
+                removePointsLayer();
+                return;
+            }
+
+            if (!currentData) return;
+
+            const geojson = buildGeoJSONFromData();
+            if (!geojson) return;
+
+            if (!map.getSource(POINTS_SOURCE_ID)) {
+                map.addSource(POINTS_SOURCE_ID, {
+                    type: 'geojson',
+                    data: geojson
+                });
+            } else {
+                const src = map.getSource(POINTS_SOURCE_ID);
+                src.setData(geojson);
+            }
+
+            if (!map.getLayer(POINTS_LAYER_ID)) {
+                const beforeId = gridLayer && map.getLayer(gridLayer.id) ? gridLayer.id : undefined;
+                map.addLayer({
+                    id: POINTS_LAYER_ID,
+                    type: 'circle',
+                    source: POINTS_SOURCE_ID,
+                    paint: {
+                        'circle-radius': 4,
+                        'circle-color': '#e74c3c',
+                        'circle-opacity': 0.7,
+                        'circle-stroke-color': '#ffffff',
+                        'circle-stroke-width': 1
+                    }
+                }, beforeId);
+            }
+        }
+
+        function removePointsLayer() {
+            if (map.getLayer(POINTS_LAYER_ID)) {
+                map.removeLayer(POINTS_LAYER_ID);
+            }
+            if (map.getSource(POINTS_SOURCE_ID)) {
+                map.removeSource(POINTS_SOURCE_ID);
+            }
+        }
+
+        // Basemap helpers
+        function getBasemapStyle(styleKey) {
+            const attributions = {
+                osm: '© OpenStreetMap contributors',
+                carto: '© OpenStreetMap contributors © CARTO'
+            };
+
+            if (styleKey === 'positron') {
+                return {
+                    version: 8,
+                    sources: {
+                        'positron': {
+                            type: 'raster',
+                            tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'],
+                            tileSize: 256,
+                            attribution: attributions.carto
+                        }
+                    },
+                    layers: [
+                        { id: 'positron', type: 'raster', source: 'positron', paint: { 'raster-opacity': 1.0 } }
+                    ]
+                };
+            }
+
+            if (styleKey === 'dark') {
+                return {
+                    version: 8,
+                    sources: {
+                        'dark': {
+                            type: 'raster',
+                            tiles: ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'],
+                            tileSize: 256,
+                            attribution: attributions.carto
+                        }
+                    },
+                    layers: [
+                        { id: 'dark', type: 'raster', source: 'dark', paint: { 'raster-opacity': 1.0 } }
+                    ]
+                };
+            }
+
+            // default: OSM
+            return {
+                version: 8,
+                sources: {
+                    'osm': {
+                        type: 'raster',
+                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256,
+                        attribution: attributions.osm
+                    }
+                },
+                layers: [
+                    { id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-opacity': 1.0 } }
+                ]
+            };
+        }
+
+        function setBasemapOpacity(opacity) {
+            const style = map.getStyle();
+            if (!style || !style.layers) return;
+            style.layers.forEach((layer) => {
+                if (layer.type === 'raster' && map.getLayer(layer.id)) {
+                    map.setPaintProperty(layer.id, 'raster-opacity', opacity);
+                }
+            });
+        }
+
+        function switchBasemap(styleKey) {
+            showLoading();
+            const newStyle = getBasemapStyle(styleKey);
+            map.setStyle(newStyle);
+            map.once('style.load', () => {
+                const opacity = parseInt(basemapOpacitySlider.value, 10) / 100;
+                setBasemapOpacity(opacity);
+
+                // Re-add overlays
+                // Reset gridLayer reference; a fresh instance will be created
+                if (gridLayer) {
+                    gridLayer = null;
+                }
+                if (enabledCheckbox.checked) {
+                    createGridLayer();
+                }
+                updatePointsLayer();
+                hideLoading();
+            });
+        }
     </script>
 </body>
 </html>
