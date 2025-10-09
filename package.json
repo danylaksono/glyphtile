@@ -1,0 +1,40 @@
+{
+  "name": "screengrid",
+  "version": "2.0.0",
+  "description": "A GPU/Canvas hybrid Screen-Space Grid Aggregation library for MapLibre GL JS with advanced glyph drawing capabilities",
+  "main": "src/screengrid.js",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "dev": "python3 -m http.server 8000",
+    "test": "echo 'Open examples/simple-test.html in your browser'"
+  },
+  "keywords": [
+    "maplibre",
+    "visualization",
+    "grid",
+    "aggregation",
+    "glyph",
+    "canvas",
+    "maps"
+  ],
+  "author": "Dany Laksono",
+  "license": "MIT",
+  "peerDependencies": {
+    "maplibre-gl": "^4.0.0"
+  },
+  "files": [
+    "src/",
+    "examples/",
+    "docs/",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/danylaksono/screengrid.git"
+  },
+  "bugs": {
+    "url": "https://github.com/danylaksono/screengrid/issues"
+  },
+  "homepage": "https://github.com/danylaksono/screengrid#readme"
+}

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScreenGrid Simple Test</title>
+    <script src="https://unpkg.com/maplibre-gl@4.0.0/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@4.0.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        #map { width: 100vw; height: 100vh; }
+        .info { position: absolute; top: 10px; left: 10px; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 1000; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="info">
+        <h3>ScreenGrid Test</h3>
+        <div id="status">Loading...</div>
+        <div id="info">-</div>
+    </div>
+
+    <script type="module">
+        import { ScreenGridLayerGL } from '../src/screengrid.js';
+        
+        // Simple test data
+        const testData = [
+            { COORDINATES: [-122.4, 37.74], RACKS: 2, SPACES: 4 },
+            { COORDINATES: [-122.41, 37.75], RACKS: 1, SPACES: 2 },
+            { COORDINATES: [-122.39, 37.73], RACKS: 3, SPACES: 6 },
+            { COORDINATES: [-122.42, 37.76], RACKS: 1, SPACES: 2 },
+            { COORDINATES: [-122.38, 37.72], RACKS: 2, SPACES: 4 }
+        ];
+        
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    'osm': {
+                        type: 'raster',
+                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256,
+                        attribution: '© OpenStreetMap contributors'
+                    }
+                },
+                layers: [
+                    {
+                        id: 'osm',
+                        type: 'raster',
+                        source: 'osm'
+                    }
+                ]
+            },
+            center: [-122.4, 37.74],
+            zoom: 12
+        });
+        
+        const statusEl = document.getElementById('status');
+        const infoEl = document.getElementById('info');
+        
+        map.on('load', () => {
+            try {
+                statusEl.textContent = 'Creating grid layer...';
+                
+                const gridLayer = new ScreenGridLayerGL({
+                    id: 'test-grid',
+                    data: testData,
+                    getPosition: (d) => d.COORDINATES,
+                    getWeight: (d) => d.SPACES,
+                    cellSizePixels: 80,
+                    colorScale: (v) => [255 * v, 200 * (1 - v), 50, 200],
+                    onAggregate: (grid) => {
+                        console.log('Grid aggregated:', grid);
+                        infoEl.innerHTML = `
+                            <div>Grid: ${grid.cols} × ${grid.rows}</div>
+                            <div>Max Value: ${Math.max(...grid.grid).toFixed(2)}</div>
+                            <div>Cells with data: ${grid.grid.filter(v => v > 0).length}</div>
+                        `;
+                        statusEl.textContent = 'Grid layer active - hover over cells!';
+                    },
+                    onHover: ({ cell }) => {
+                        console.log('Hovered cell:', cell);
+                    },
+                    onClick: ({ cell }) => {
+                        alert(`Clicked cell (${cell.col}, ${cell.row})\nValue: ${cell.value.toFixed(2)}`);
+                    }
+                });
+                
+                map.addLayer(gridLayer);
+                console.log('Layer added to map');
+                
+            } catch (error) {
+                console.error('Error:', error);
+                statusEl.textContent = `Error: ${error.message}`;
+            }
+        });
+        
+        map.on('error', (e) => {
+            console.error('Map error:', e);
+            statusEl.textContent = `Map error: ${e.error.message}`;
+        });
+    </script>
+</body>
+</html>
