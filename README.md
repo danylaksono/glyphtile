@@ -37,20 +37,25 @@ screengrid/
 ### Installation
 
 ```bash
-# Clone the repository
+# From npm
+npm install screengrid
+
+# Peer dependency (you manage this in your app)
+npm install maplibre-gl
+
+# Or clone the repository for development
 git clone https://github.com/danylaksono/screengrid.git
 cd screengrid
-
-# Start development server
-npm start
-# or
-python3 -m http.server 8000
+npm install
+npm run build
 ```
 
 ### Basic Usage
 
 ```javascript
-import { ScreenGridLayerGL } from './src/screengrid.js';
+// ESM (bundlers / modern Node)
+import { ScreenGridLayerGL } from 'screengrid';
+import maplibregl from 'maplibre-gl';
 
 // Initialize MapLibre map
 const map = new maplibregl.Map({
@@ -77,6 +82,71 @@ map.on('load', async () => {
   map.addLayer(gridLayer);
 });
 ```
+
+### CommonJS (Node or older bundlers)
+
+```javascript
+// CJS require
+const { ScreenGridLayerGL } = require('screengrid');
+const maplibregl = require('maplibre-gl');
+```
+
+### CDN Usage
+
+```html
+<!-- UMD build exposes global `ScreenGrid` -->
+<script src="https://unpkg.com/screengrid/dist/screengrid.umd.min.js"></script>
+<!-- MapLibre (peer) must also be included on the page -->
+<link href="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.js"></script>
+<script>
+  const { ScreenGridLayerGL } = ScreenGrid;
+  // use ScreenGridLayerGL here
+  // ...
+  // map.addLayer(new ScreenGridLayerGL({...}))
+</script>
+```
+
+### Full Example (CDN)
+
+```html
+<div id="map" style="position:absolute;top:0;bottom:0;width:100%"></div>
+<link href="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/screengrid/dist/screengrid.umd.min.js"></script>
+<script>
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://demotiles.maplibre.org/style.json',
+    center: [-122.4, 37.74],
+    zoom: 11
+  });
+
+  map.on('load', async () => {
+    const data = await fetch('your-data.json').then(r => r.json());
+    const layer = new ScreenGrid.ScreenGridLayerGL({
+      data,
+      getPosition: d => d.coordinates,
+      getWeight: d => d.weight,
+      cellSizePixels: 60,
+      colorScale: v => [255 * v, 200 * (1 - v), 50, 220]
+    });
+    map.addLayer(layer);
+  });
+  
+  // Optional: hover/click handlers
+  // layer.setConfig({ onHover: ({cell}) => console.log(cell) });
+</script>
+```
+
+### Bundles
+
+- ESM: `dist/screengrid.mjs`
+- CJS: `dist/screengrid.cjs`
+- UMD: `dist/screengrid.umd.js`
+- UMD (min): `dist/screengrid.umd.min.js`
+
+`maplibre-gl` is a peer dependency and is not bundled. In UMD builds, it is expected as a global `maplibregl`.
 
 ## 🎨 Glyph Drawing
 

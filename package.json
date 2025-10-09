@@ -2,11 +2,16 @@
   "name": "screengrid",
   "version": "2.0.0",
   "description": "A GPU/Canvas hybrid Screen-Space Grid Aggregation library for MapLibre GL JS with advanced glyph drawing capabilities",
-  "main": "src/screengrid.js",
+  "main": "dist/screengrid.cjs",
+  "module": "dist/screengrid.mjs",
+  "unpkg": "dist/screengrid.umd.min.js",
+  "jsdelivr": "dist/screengrid.umd.min.js",
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 8000",
     "dev": "python3 -m http.server 8000",
+    "build": "rollup -c",
+    "prepublishOnly": "npm run build",
     "test": "echo 'Open examples/simple-test.html in your browser'"
   },
   "keywords": [
@@ -24,11 +29,19 @@
     "maplibre-gl": "^4.0.0"
   },
   "files": [
+    "dist/",
     "src/",
     "examples/",
     "docs/",
     "README.md"
   ],
+  "exports": {
+    ".": {
+      "import": "./dist/screengrid.mjs",
+      "require": "./dist/screengrid.cjs",
+      "default": "./dist/screengrid.mjs"
+    }
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/danylaksono/screengrid.git"
@@ -36,5 +49,14 @@
   "bugs": {
     "url": "https://github.com/danylaksono/screengrid/issues"
   },
-  "homepage": "https://github.com/danylaksono/screengrid#readme"
+  "homepage": "https://github.com/danylaksono/screengrid#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.6",
+    "@rollup/plugin-node-resolve": "^16.0.2",
+    "@rollup/plugin-terser": "^0.4.4",
+    "rollup": "^4.52.4"
+  }
 }
