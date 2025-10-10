@@ -1,0 +1,59 @@
+name: npm publish
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Determine versions
+        id: versions
+        run: |
+          echo "PKG_NAME=$(node -p "require('./package.json').name")" >> $GITHUB_ENV
+          echo "LOCAL_VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
+          REMOTE_VERSION=$(npm view $(node -p "require('./package.json').name") version || echo 0.0.0)
+          echo "REMOTE_VERSION=$REMOTE_VERSION" >> $GITHUB_ENV
+          if [ "$REMOTE_VERSION" = "$LOCAL_VERSION" ]; then
+            echo "publish=false" >> $GITHUB_OUTPUT
+          else
+            echo "publish=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish to npm
+        if: steps.versions.outputs.publish == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm publish --access public --provenance
+
+      - name: Summary
+        run: |
+          echo "package: $PKG_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "local: $LOCAL_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "remote: $REMOTE_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "published: ${{ steps.versions.outputs.publish }}" >> $GITHUB_STEP_SUMMARY
+
+

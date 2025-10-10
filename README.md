@@ -285,3 +285,30 @@ MIT License - see LICENSE file for details.
 - MapLibre GL JS integration
 - Interactive hover and click events
 - Customizable styling options
+
+## 🧪 CI/CD: Auto-publish to npm
+
+This repository includes a GitHub Actions workflow that automatically publishes to npm when changes are pushed to the `main` branch and the version in `package.json` is higher than the version currently on npm.
+
+### Setup
+
+1. Create an npm token with publish rights: Settings → Access Tokens → Generate a new Classic token.
+2. In your GitHub repository settings, add a secret named `NPM_TOKEN` containing that token.
+3. Ensure `package.json` has correct `name`, `version`, `main/module/exports` fields and the project builds via `npm run build`.
+
+### How it works
+
+- On push to `main`, the workflow installs dependencies, builds, compares local `package.json` version with `npm view <name> version`, and publishes only if they differ.
+- Publishing uses provenance (`--provenance`) and requires Node 18+.
+
+### Trigger manual publish
+
+- From the Actions tab, run the workflow via “Run workflow” (uses `workflow_dispatch`).
+
+### Versioning
+
+- Bump versions using semver before merging to `main`:
+  - Patch: `npm version patch`
+  - Minor: `npm version minor`
+  - Major: `npm version major`
+  Commit and push the tag to trigger publish.
