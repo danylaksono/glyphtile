@@ -146,8 +146,7 @@ const maplibregl = require('maplibre-gl');
 - UMD: `dist/screengrid.umd.js`
 - UMD (min): `dist/screengrid.umd.min.js`
 
-`maplibre-gl` is a peer dependency and is not bundled. In UMD builds, it is expected as a global `maplibregl`.
-
+`maplibre-gl` is a peer dependency and is not bundled. In UMD builds, it is expected as a global `maplibregl`.                                                                                                                                             
 ## 🎨 Glyph Drawing
 
 The library supports custom glyph drawing through the `onDrawCell` callback:
