@@ -19,17 +19,32 @@ A GPU/Canvas hybrid Screen-Space Grid Aggregation library for MapLibre GL JS. Th
 ```
 screengrid/
 ├── src/
-│   └── screengrid.js          # Main library file
-├── examples/
-│   ├── index.html             # Full-featured demo
-│   ├── simple-test.html       # Basic functionality test
-│   └── test.html              # Original test file
+│   ├── index.js                    # Main entry point
+│   ├── ScreenGridLayerGL.js        # Main orchestrator class
+│   ├── config/ConfigManager.js     # Configuration management
+│   ├── core/                       # Core business logic (pure)
+│   │   ├── Aggregator.js
+│   │   ├── Projector.js
+│   │   └── CellQueryEngine.js
+│   ├── canvas/                     # Canvas rendering
+│   │   ├── CanvasManager.js
+│   │   └── Renderer.js
+│   ├── events/                     # Event system
+│   │   ├── EventBinder.js
+│   │   └── EventHandlers.js
+│   └── glyphs/GlyphUtilities.js    # Glyph drawing utilities
+├── dist/                           # Built distribution files
 ├── docs/
-│   ├── README.md              # This file
-│   └── USAGE.md               # Detailed usage guide
-├── assets/                    # Static assets
+│   ├── ARCHITECTURE.md             # Detailed architecture guide
+│   ├── USAGE.md                    # Detailed usage guide
+│   └── README.md
+├── examples/
+│   ├── index.html
+│   ├── simple-test.html
+│   └── test.html
 ├── package.json
-└── server.py                  # Development server
+├── rollup.config.mjs
+└── server.py
 ```
 
 ## 🚀 Quick Start
@@ -235,6 +250,15 @@ ScreenGridLayerGL.drawPieGlyph(ctx, x, y, values, radius, colors);
 
 // Scatter plot glyph
 ScreenGridLayerGL.drawScatterGlyph(ctx, x, y, points, cellSize, color);
+
+// Donut chart glyph (v2.0.0+)
+ScreenGridLayerGL.drawDonutGlyph(ctx, x, y, values, outerRadius, innerRadius, colors);
+
+// Heatmap intensity glyph (v2.0.0+)
+ScreenGridLayerGL.drawHeatmapGlyph(ctx, x, y, radius, normalizedValue, colorScale);
+
+// Radial bar chart glyph (v2.0.0+)
+ScreenGridLayerGL.drawRadialBarGlyph(ctx, x, y, values, maxValue, maxRadius, color);
 ```
 
 ## 🐛 Troubleshooting
@@ -254,6 +278,10 @@ Enable debug logging by opening browser console. The library provides detailed l
 - Rendering process
 - Error states
 
+## 👤 Author
+
+**dany laksono**
+
 ## 📄 License
 
 MIT License - see LICENSE file for details.
@@ -269,15 +297,23 @@ MIT License - see LICENSE file for details.
 ## 📝 Changelog
 
 ### v2.0.0
+- **NEW**: Comprehensive modular refactoring (11 modules with clean separation of concerns)
+- **NEW**: Core modules for pure business logic (Aggregator, Projector, CellQueryEngine) - zero UI dependencies
+- **NEW**: Dedicated canvas management (CanvasManager, Renderer) - clean rendering pipeline
+- **NEW**: Organized event system (EventBinder, EventHandlers) - testable event logic
+- **NEW**: Configuration management system (ConfigManager)
 - **NEW**: Glyph drawing system with `onDrawCell` callback
-- **NEW**: Built-in glyph utilities (circle, bar chart, pie chart, scatter plot)
+- **NEW**: 7 built-in glyph utilities (circle, bar, pie, scatter, donut, heatmap, radial bar)
 - **NEW**: Enhanced aggregation storing raw data points per cell
 - **NEW**: Zoom-based cell size adjustment
 - **NEW**: Adaptive cell sizing options
 - **NEW**: Multi-attribute visualization support
+- **NEW**: Grid statistics method (`getStats()`)
+- **NEW**: Spatial query methods (`getCellsInBounds()`, `getCellsAboveThreshold()`)
 - **IMPROVED**: Enhanced cell interaction with detailed data access
 - **IMPROVED**: Better performance with optimized rendering pipeline
-- **IMPROVED**: Better folder structure and documentation
+- **IMPROVED**: Modular architecture enables better testing and reusability
+- **IMPROVED**: Comprehensive documentation with architecture guide
 
 ### v1.0.0
 - Initial release
@@ -286,29 +322,20 @@ MIT License - see LICENSE file for details.
 - Interactive hover and click events
 - Customizable styling options
 
-## 🧪 CI/CD: Auto-publish to npm
 
-This repository includes a GitHub Actions workflow that automatically publishes to npm when changes are pushed to the `main` branch and the version in `package.json` is higher than the version currently on npm.
+## Future Plans
 
-### Setup
+### Short-term
+1. Add unit tests for each module
+2. Add integration tests
+3. Create CI/CD pipeline for testing
+4. Consider TypeScript definitions
 
-1. Create an npm token with publish rights: Settings → Access Tokens → Generate a new Classic token.
-2. In your GitHub repository settings, add a secret named `NPM_TOKEN` containing that token.
-3. Ensure `package.json` has correct `name`, `version`, `main/module/exports` fields and the project builds via `npm run build`.
+### Long-term
+1. Plugin system for custom glyphs
+2. WebGL renderer alternative
+3. Server-side aggregation
+4. Framework bindings (React, Vue)
+5. Performance optimizations
 
-### How it works
 
-- On push to `main`, the workflow installs dependencies, builds, compares local `package.json` version with `npm view <name> version`, and publishes only if they differ.
-- Publishing uses provenance (`--provenance`) and requires Node 18+.
-
-### Trigger manual publish
-
-- From the Actions tab, run the workflow via “Run workflow” (uses `workflow_dispatch`).
-
-### Versioning
-
-- Bump versions using semver before merging to `main`:
-  - Patch: `npm version patch`
-  - Minor: `npm version minor`
-  - Major: `npm version major`
-  Commit and push the tag to trigger publish.

@@ -2,7 +2,7 @@ import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import terser from '@rollup/plugin-terser';
 
-const input = 'src/screengrid.js';
+const input = 'src/index.js';
 const external = ['maplibre-gl'];
 const globals = { 'maplibre-gl': 'maplibregl' };
 
