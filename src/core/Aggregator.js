@@ -48,11 +48,11 @@ export class Aggregator {
     }
 
     const cellsWithData = grid.filter((v) => v > 0).length;
-    console.log('Grid aggregation complete:', {
-      cellsWithData,
-      maxValue: Math.max(...grid),
-      totalValue: grid.reduce((sum, v) => sum + v, 0),
-    });
+    // console.log('Grid aggregation complete:', {
+    //   cellsWithData,
+    //   maxValue: Math.max(...grid),
+    //   totalValue: grid.reduce((sum, v) => sum + v, 0),
+    // });
 
     return {
       grid,

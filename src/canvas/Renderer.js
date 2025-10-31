@@ -31,13 +31,13 @@ export class Renderer {
       return;
     }
 
-    console.log('Rendering grid:', {
-      cols,
-      rows,
-      maxVal,
-      cellsWithData: grid.filter((v) => v > 0).length,
-      enableGlyphs,
-    });
+    // console.log('Rendering grid:', {
+    //   cols,
+    //   rows,
+    //   maxVal,
+    //   cellsWithData: grid.filter((v) => v > 0).length,
+    //   enableGlyphs,
+    // });
 
     // Clear canvas
     const dpr = window.devicePixelRatio || 1;

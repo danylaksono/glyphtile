@@ -7,7 +7,11 @@
     <link href="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.js"></script>
     <script type="module">
-        import { ScreenGridLayerGL, GlyphUtilities } from '../src/screengrid.js';
+        import { ScreenGridLayerGL, GlyphUtilities } from '../src/index.js';
+
+        // Global state for hovered year reference
+        let hoveredYear = null;
+        let gridLayer = null;
 
         const map = new maplibregl.Map({
             container: 'map',
@@ -26,7 +30,6 @@
                         { id: 'dark', type: 'raster', source: 'dark', paint: { 'raster-opacity': 1.0 } }
                     ]
                 },
-            // center: [-1.25, 51.75],
             // center shows cambridge, uk
             center: [0.1278, 52.2053], 
             zoom: 12
@@ -35,6 +38,7 @@
         /**
          * Custom glyph function for time series visualization
          * Groups data by year and aggregates ashp_carbonsaved values
+         * Also draws reference line for hovered year if applicable
          */
         function drawTimeSeriesGlyph(ctx, x, y, normVal, cellInfo) {
             const { cellData, cellSize } = cellInfo;
@@ -71,7 +75,14 @@
 
             if (timeSeriesData.length === 0) return;
 
+            // Get year range for this cell
+            const years = timeSeriesData.map(d => d.year);
+            const minYear = Math.min(...years);
+            const maxYear = Math.max(...years);
+            const yearRange = maxYear - minYear || 1;
+
             // Draw time series chart
+            const padding = 0.15;
             GlyphUtilities.drawTimeSeriesGlyph(
                 ctx,
                 x,
@@ -86,52 +97,59 @@
                     showPoints: true,
                     showArea: true,
                     areaColor: 'rgba(46, 204, 113, 0.15)',
-                    padding: 0.15
+                    padding: padding
                 }
             );
-        }
 
-        /**
-         * Alternative: Bar chart over time
-         */
-        function drawTimeSeriesBarGlyph(ctx, x, y, normVal, cellInfo) {
-            const { cellData, cellSize } = cellInfo;
-            
-            if (!cellData || cellData.length === 0) return;
-
-            // Group by year
-            const yearData = {};
-            cellData.forEach(item => {
-                const year = item.data.year;
-                const carbonSaved = item.data.ashp_carbonsaved;
+            // Draw reference line for hovered year if it exists in this cell's data
+            if (hoveredYear !== null && hoveredYear >= minYear && hoveredYear <= maxYear) {
+                const chartWidth = cellSize * (1 - 2 * padding);
+                const chartHeight = cellSize * (1 - 2 * padding);
+                const chartX = x - chartWidth / 2;
+                const chartY = y - chartHeight / 2;
                 
-                if (carbonSaved == null || isNaN(carbonSaved)) return;
+                // Calculate x position for the hovered year
+                const yearX = chartX + ((hoveredYear - minYear) / yearRange) * chartWidth;
                 
-                if (!yearData[year]) {
-                    yearData[year] = { total: 0, count: 0 };
+                // Draw vertical reference line
+                ctx.strokeStyle = 'rgba(150, 150, 150, 0.7)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([3, 3]); // Dashed line
+                ctx.beginPath();
+                ctx.moveTo(yearX, chartY);
+                ctx.lineTo(yearX, chartY + chartHeight);
+                ctx.stroke();
+                ctx.setLineDash([]); // Reset dash
+                
+                // Draw a small circle at the intersection with the line (if data exists for this year)
+                const yearValue = timeSeriesData.find(d => d.year === hoveredYear);
+                if (yearValue) {
+                    const values = timeSeriesData.map(d => d.value);
+                    const minValue = Math.min(...values);
+                    const maxValue = Math.max(...values);
+                    const valueRange = maxValue - minValue || 1;
+                    
+                    const valueY = chartY + chartHeight - ((yearValue.value - minValue) / valueRange) * chartHeight;
+                    
+                    // Draw circle marker
+                    ctx.fillStyle = 'rgba(150, 150, 150, 0.9)';
+                    ctx.beginPath();
+                    ctx.arc(yearX, valueY, 3.5, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    // Draw white outline for better visibility
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
                 }
-                yearData[year].total += carbonSaved;
-                yearData[year].count += 1;
-            });
-
-            // Convert to sorted array
-            const sortedYears = Object.keys(yearData)
-                .map(y => parseInt(y))
-                .sort((a, b) => a - b);
-            
-            const values = sortedYears.map(year => yearData[year].total);
-            const maxValue = Math.max(...values, 1);
-
-            // Draw bar chart
-            GlyphUtilities.drawBarGlyph(
-                ctx,
-                x,
-                y,
-                values,
-                maxValue,
-                cellSize,
-                ['#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6']
-            );
+                
+                // Draw year label at the bottom of the chart
+                ctx.fillStyle = 'rgba(150, 150, 150, 0.9)';
+                ctx.font = 'bold 9px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillText(hoveredYear.toString(), yearX, chartY + chartHeight + 2);
+            }
         }
 
         map.on('load', async () => {
@@ -151,9 +169,7 @@
 
             console.log(`Using ${validData.length} valid data points`);
 
-            let useTimeSeries = true;
-
-            const gridLayer = new ScreenGridLayerGL({
+            gridLayer = new ScreenGridLayerGL({
                 id: 'cambridge-timeseries',
                 data: validData,
                 getPosition: (d) => [d.lon, d.lat],
@@ -162,7 +178,7 @@
                 colorScale: (v) => [255 * v, 200 * (1 - v), 50, 180],
                 enableGlyphs: true,
                 glyphSize: 0.9,
-                onDrawCell: useTimeSeries ? drawTimeSeriesGlyph : drawTimeSeriesBarGlyph,
+                onDrawCell: drawTimeSeriesGlyph,
                 onAggregate: (grid) => {
                     console.log('Grid aggregated:', {
                         cols: grid.cols,
@@ -171,30 +187,82 @@
                         maxValue: Math.max(...grid.grid)
                     });
                 },
-                onHover: ({ cell }) => {
-                    if (cell.cellData && cell.cellData.length > 0) {
-                        // Group by year for display
-                        const yearGroups = {};
-                        cell.cellData.forEach(item => {
-                            const year = item.data.year;
-                            if (!yearGroups[year]) {
-                                yearGroups[year] = {
-                                    total: 0,
-                                    count: 0
-                                };
-                            }
-                            if (item.data.ashp_carbonsaved != null) {
-                                yearGroups[year].total += item.data.ashp_carbonsaved;
-                                yearGroups[year].count += 1;
-                            }
-                        });
+                onHover: ({ cell, event }) => {
+                    // Clear reference line if hovering over cell without data
+                    if (!cell || !cell.cellData || cell.cellData.length === 0) {
+                        if (hoveredYear !== null) {
+                            hoveredYear = null;
+                            gridLayer.render();
+                        }
+                        return;
+                    }
+
+                    // Group by year for display
+                    const yearGroups = {};
+                    cell.cellData.forEach(item => {
+                        const year = item.data.year;
+                        if (!yearGroups[year]) {
+                            yearGroups[year] = {
+                                total: 0,
+                                count: 0
+                            };
+                        }
+                        if (item.data.ashp_carbonsaved != null) {
+                            yearGroups[year].total += item.data.ashp_carbonsaved;
+                            yearGroups[year].count += 1;
+                        }
+                    });
+                    
+                    // Calculate which year the mouse is over based on x position within cell
+                    const cellSize = gridLayer.config.cellSizePixels;
+                    const mouseX = event.point.x;
+                    
+                    // Calculate relative position within the cell (0 to 1)
+                    // cell.x is the left edge of the cell in canvas coordinates
+                    const relativeX = (mouseX - cell.x) / cellSize;
+                    
+                    // Get year range for this cell
+                    const years = Object.keys(yearGroups).map(y => parseInt(y)).sort((a, b) => a - b);
+                    if (years.length > 0) {
+                        const minYear = Math.min(...years);
+                        const maxYear = Math.max(...years);
+                        const yearRange = maxYear - minYear || 1;
                         
-                        const yearSummary = Object.keys(yearGroups)
-                            .sort()
-                            .map(year => `${year}: ${yearGroups[year].total.toFixed(1)} kg CO₂`)
-                            .join('\n');
+                        // Calculate year based on mouse x position within the chart area
+                        // Account for padding: chart starts at padding, ends at (1 - padding)
+                        const padding = 0.15;
+                        const chartStart = padding;
+                        const chartEnd = 1 - padding;
+                        const chartWidth = chartEnd - chartStart;
                         
-                        console.log(`Cell at [${cell.col}, ${cell.row}]:\n${yearSummary}`);
+                        // Normalize relativeX to chart area
+                        const normalizedX = (relativeX - chartStart) / chartWidth;
+                        const clampedX = Math.max(0, Math.min(1, normalizedX));
+                        
+                        const calculatedYear = Math.round(minYear + clampedX * yearRange);
+                        
+                        // Only update if year is valid and in range
+                        if (calculatedYear >= minYear && calculatedYear <= maxYear) {
+                            hoveredYear = calculatedYear;
+                            // Trigger re-render to show reference lines
+                            gridLayer.render();
+                        }
+                    } else {
+                        // No valid years found, clear reference line
+                        if (hoveredYear !== null) {
+                            hoveredYear = null;
+                            gridLayer.render();
+                        }
+                    }
+                    
+                    const yearSummary = Object.keys(yearGroups)
+                        .sort()
+                        .map(year => `${year}: ${yearGroups[year].total.toFixed(1)} kg CO₂`)
+                        .join('\n');
+                    
+                    // console.log(`Cell at [${cell.col}, ${cell.row}]:\n${yearSummary}`);
+                    if (hoveredYear !== null) {
+                        console.log(`Hovered year: ${hoveredYear}`);
                     }
                 },
                 onClick: ({ cell }) => {
@@ -223,44 +291,11 @@
 
             map.addLayer(gridLayer);
 
-            // Add controls
-            const controls = document.createElement('div');
-            controls.style.cssText = `
-                position: absolute;
-                top: 10px;
-                right: 10px;
-                background: white;
-                padding: 15px;
-                border-radius: 8px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-                z-index: 1000;
-                font-family: Arial, sans-serif;
-                font-size: 14px;
-            `;
-            
-            controls.innerHTML = `
-                <h3 style="margin-top: 0; margin-bottom: 10px;">Visualization Options</h3>
-                <button id="toggleGlyph" style="padding: 8px 12px; margin-bottom: 10px; cursor: pointer;">
-                    Switch to Bar Chart
-                </button>
-                <div style="font-size: 12px; color: #666;">
-                    Showing: <span id="currentMode">Time Series Line</span>
-                </div>
-            `;
-            
-            document.body.appendChild(controls);
-            
-            const toggleBtn = document.getElementById('toggleGlyph');
-            const modeSpan = document.getElementById('currentMode');
-            
-            toggleBtn.onclick = () => {
-                useTimeSeries = !useTimeSeries;
-                gridLayer.setConfig({
-                    onDrawCell: useTimeSeries ? drawTimeSeriesGlyph : drawTimeSeriesBarGlyph
-                });
-                toggleBtn.textContent = useTimeSeries ? 'Switch to Bar Chart' : 'Switch to Line Chart';
-                modeSpan.textContent = useTimeSeries ? 'Time Series Line' : 'Time Series Bar';
-            };
+            // Clear hovered year when mouse leaves the map
+            map.on('mouseout', () => {
+                hoveredYear = null;
+                gridLayer.render();
+            });
         });
     </script>
     <style>

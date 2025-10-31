@@ -1,4 +1,4 @@
-import { ScreenGridLayerGL } from "./screengrid.js";
+import { ScreenGridLayerGL } from "../src/index.js";
 
 const map = new maplibregl.Map({
   container: "map",
