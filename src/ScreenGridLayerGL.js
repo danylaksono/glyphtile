@@ -267,4 +267,5 @@ export class ScreenGridLayerGL {
   static drawDonutGlyph = GlyphUtilities.drawDonutGlyph;
   static drawHeatmapGlyph = GlyphUtilities.drawHeatmapGlyph;
   static drawRadialBarGlyph = GlyphUtilities.drawRadialBarGlyph;
+  static drawTimeSeriesGlyph = GlyphUtilities.drawTimeSeriesGlyph;
 }

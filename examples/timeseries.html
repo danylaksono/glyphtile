@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>cambridge Spatio-Temporal Data Visualization</title>
+    <link href="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.js"></script>
+    <script type="module">
+        import { ScreenGridLayerGL, GlyphUtilities } from '../src/screengrid.js';
+
+        const map = new maplibregl.Map({
+            container: 'map',
+            // style: 'https://demotiles.maplibre.org/style.json',
+            style: {
+                    version: 8,
+                    sources: {
+                        'dark': {
+                            type: 'raster',
+                            tiles: ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'],
+                            tileSize: 256,
+                            attribution: '© OpenStreetMap contributors © CARTO'
+                        }
+                    },
+                    layers: [
+                        { id: 'dark', type: 'raster', source: 'dark', paint: { 'raster-opacity': 1.0 } }
+                    ]
+                },
+            // center: [-1.25, 51.75],
+            // center shows cambridge, uk
+            center: [0.1278, 52.2053], 
+            zoom: 12
+        });
+
+        /**
+         * Custom glyph function for time series visualization
+         * Groups data by year and aggregates ashp_carbonsaved values
+         */
+        function drawTimeSeriesGlyph(ctx, x, y, normVal, cellInfo) {
+            const { cellData, cellSize } = cellInfo;
+            
+            if (!cellData || cellData.length === 0) return;
+
+            // Group data by year and aggregate ashp_carbonsaved
+            const yearData = {};
+            
+            cellData.forEach(item => {
+                const year = item.data.year;
+                const carbonSaved = item.data.ashp_carbonsaved;
+                
+                // Skip null/undefined values
+                if (carbonSaved == null || isNaN(carbonSaved)) return;
+                
+                if (!yearData[year]) {
+                    yearData[year] = {
+                        year: year,
+                        total: 0,
+                        count: 0
+                    };
+                }
+                
+                yearData[year].total += carbonSaved;
+                yearData[year].count += 1;
+            });
+
+            // Convert to array and calculate average (or use sum)
+            const timeSeriesData = Object.values(yearData).map(d => ({
+                year: d.year,
+                value: d.total // Use sum, or change to d.total / d.count for average
+            }));
+
+            if (timeSeriesData.length === 0) return;
+
+            // Draw time series chart
+            GlyphUtilities.drawTimeSeriesGlyph(
+                ctx,
+                x,
+                y,
+                timeSeriesData,
+                cellSize,
+                {
+                    lineColor: '#2ecc71',
+                    pointColor: '#27ae60',
+                    lineWidth: 2,
+                    pointRadius: 2.5,
+                    showPoints: true,
+                    showArea: true,
+                    areaColor: 'rgba(46, 204, 113, 0.15)',
+                    padding: 0.15
+                }
+            );
+        }
+
+        /**
+         * Alternative: Bar chart over time
+         */
+        function drawTimeSeriesBarGlyph(ctx, x, y, normVal, cellInfo) {
+            const { cellData, cellSize } = cellInfo;
+            
+            if (!cellData || cellData.length === 0) return;
+
+            // Group by year
+            const yearData = {};
+            cellData.forEach(item => {
+                const year = item.data.year;
+                const carbonSaved = item.data.ashp_carbonsaved;
+                
+                if (carbonSaved == null || isNaN(carbonSaved)) return;
+                
+                if (!yearData[year]) {
+                    yearData[year] = { total: 0, count: 0 };
+                }
+                yearData[year].total += carbonSaved;
+                yearData[year].count += 1;
+            });
+
+            // Convert to sorted array
+            const sortedYears = Object.keys(yearData)
+                .map(y => parseInt(y))
+                .sort((a, b) => a - b);
+            
+            const values = sortedYears.map(year => yearData[year].total);
+            const maxValue = Math.max(...values, 1);
+
+            // Draw bar chart
+            GlyphUtilities.drawBarGlyph(
+                ctx,
+                x,
+                y,
+                values,
+                maxValue,
+                cellSize,
+                ['#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6']
+            );
+        }
+
+        map.on('load', async () => {
+            // Load cambridge data
+            const data = await fetch('./data/cambridge.json').then(r => r.json());
+            
+            console.log(`Loaded ${data.length} data points`);
+            console.log('Sample data:', data[0]);
+
+            // Filter to only include entries with valid coordinates and ashp_carbonsaved
+            const validData = data.filter(d => 
+                d.lat != null && 
+                d.lon != null && 
+                d.year != null &&
+                d.ashp_carbonsaved != null
+            );
+
+            console.log(`Using ${validData.length} valid data points`);
+
+            let useTimeSeries = true;
+
+            const gridLayer = new ScreenGridLayerGL({
+                id: 'cambridge-timeseries',
+                data: validData,
+                getPosition: (d) => [d.lon, d.lat],
+                getWeight: (d) => d.ashp_carbonsaved || 0,
+                cellSizePixels: 80,
+                colorScale: (v) => [255 * v, 200 * (1 - v), 50, 180],
+                enableGlyphs: true,
+                glyphSize: 0.9,
+                onDrawCell: useTimeSeries ? drawTimeSeriesGlyph : drawTimeSeriesBarGlyph,
+                onAggregate: (grid) => {
+                    console.log('Grid aggregated:', {
+                        cols: grid.cols,
+                        rows: grid.rows,
+                        cellsWithData: grid.grid.filter(v => v > 0).length,
+                        maxValue: Math.max(...grid.grid)
+                    });
+                },
+                onHover: ({ cell }) => {
+                    if (cell.cellData && cell.cellData.length > 0) {
+                        // Group by year for display
+                        const yearGroups = {};
+                        cell.cellData.forEach(item => {
+                            const year = item.data.year;
+                            if (!yearGroups[year]) {
+                                yearGroups[year] = {
+                                    total: 0,
+                                    count: 0
+                                };
+                            }
+                            if (item.data.ashp_carbonsaved != null) {
+                                yearGroups[year].total += item.data.ashp_carbonsaved;
+                                yearGroups[year].count += 1;
+                            }
+                        });
+                        
+                        const yearSummary = Object.keys(yearGroups)
+                            .sort()
+                            .map(year => `${year}: ${yearGroups[year].total.toFixed(1)} kg CO₂`)
+                            .join('\n');
+                        
+                        console.log(`Cell at [${cell.col}, ${cell.row}]:\n${yearSummary}`);
+                    }
+                },
+                onClick: ({ cell }) => {
+                    if (cell.cellData && cell.cellData.length > 0) {
+                        const yearGroups = {};
+                        cell.cellData.forEach(item => {
+                            const year = item.data.year;
+                            if (!yearGroups[year]) {
+                                yearGroups[year] = { total: 0, count: 0 };
+                            }
+                            if (item.data.ashp_carbonsaved != null) {
+                                yearGroups[year].total += item.data.ashp_carbonsaved;
+                                yearGroups[year].count += 1;
+                            }
+                        });
+                        
+                        const yearSummary = Object.keys(yearGroups)
+                            .sort()
+                            .map(year => `${year}: ${yearGroups[year].total.toFixed(1)} kg CO₂ (${yearGroups[year].count} points)`)
+                            .join('\n');
+                        
+                        alert(`Cell Details:\n\n${yearSummary}\n\nTotal data points: ${cell.cellData.length}`);
+                    }
+                }
+            });
+
+            map.addLayer(gridLayer);
+
+            // Add controls
+            const controls = document.createElement('div');
+            controls.style.cssText = `
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                background: white;
+                padding: 15px;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                z-index: 1000;
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+            `;
+            
+            controls.innerHTML = `
+                <h3 style="margin-top: 0; margin-bottom: 10px;">Visualization Options</h3>
+                <button id="toggleGlyph" style="padding: 8px 12px; margin-bottom: 10px; cursor: pointer;">
+                    Switch to Bar Chart
+                </button>
+                <div style="font-size: 12px; color: #666;">
+                    Showing: <span id="currentMode">Time Series Line</span>
+                </div>
+            `;
+            
+            document.body.appendChild(controls);
+            
+            const toggleBtn = document.getElementById('toggleGlyph');
+            const modeSpan = document.getElementById('currentMode');
+            
+            toggleBtn.onclick = () => {
+                useTimeSeries = !useTimeSeries;
+                gridLayer.setConfig({
+                    onDrawCell: useTimeSeries ? drawTimeSeriesGlyph : drawTimeSeriesBarGlyph
+                });
+                toggleBtn.textContent = useTimeSeries ? 'Switch to Bar Chart' : 'Switch to Line Chart';
+                modeSpan.textContent = useTimeSeries ? 'Time Series Line' : 'Time Series Bar';
+            };
+        });
+    </script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+</body>
+</html>
+

@@ -194,4 +194,111 @@ export class GlyphUtilities {
       ctx.stroke();
     });
   }
+
+  /**
+   * Draw a time series line chart glyph
+   * @param {CanvasRenderingContext2D} ctx - Canvas context
+   * @param {number} x - Center X coordinate
+   * @param {number} y - Center Y coordinate
+   * @param {Array} timeSeriesData - Array of {year, value} objects, sorted by year
+   * @param {number} cellSize - Cell size in pixels
+   * @param {Object} options - Optional configuration
+   * @param {string} options.lineColor - Line color (default: '#3498db')
+   * @param {string} options.pointColor - Point color (default: '#e74c3c')
+   * @param {number} options.lineWidth - Line width (default: 2)
+   * @param {number} options.pointRadius - Point radius (default: 2)
+   * @param {boolean} options.showPoints - Whether to show data points (default: true)
+   * @param {boolean} options.showArea - Whether to fill area under line (default: false)
+   * @param {string} options.areaColor - Area fill color (default: 'rgba(52, 152, 219, 0.2)')
+   * @param {number} options.padding - Padding around chart (default: 0.1, as fraction of cellSize)
+   */
+  static drawTimeSeriesGlyph(
+    ctx,
+    x,
+    y,
+    timeSeriesData,
+    cellSize,
+    options = {}
+  ) {
+    if (!timeSeriesData || timeSeriesData.length === 0) return;
+
+    const {
+      lineColor = '#3498db',
+      pointColor = '#e74c3c',
+      lineWidth = 2,
+      pointRadius = 2,
+      showPoints = true,
+      showArea = false,
+      areaColor = 'rgba(52, 152, 219, 0.2)',
+      padding = 0.1,
+    } = options;
+
+    // Filter out null/undefined values and sort by year
+    const validData = timeSeriesData
+      .filter((d) => d.value != null && !isNaN(d.value))
+      .sort((a, b) => a.year - b.year);
+
+    if (validData.length === 0) return;
+
+    // Calculate chart dimensions
+    const chartWidth = cellSize * (1 - 2 * padding);
+    const chartHeight = cellSize * (1 - 2 * padding);
+    const chartX = x - chartWidth / 2;
+    const chartY = y - chartHeight / 2;
+
+    // Find min/max values for scaling
+    const values = validData.map((d) => d.value);
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    const valueRange = maxValue - minValue || 1; // Avoid division by zero
+
+    // Calculate year range
+    const years = validData.map((d) => d.year);
+    const minYear = Math.min(...years);
+    const maxYear = Math.max(...years);
+    const yearRange = maxYear - minYear || 1;
+
+    // Map data points to pixel coordinates
+    const points = validData.map((d) => {
+      const px = chartX + ((d.year - minYear) / yearRange) * chartWidth;
+      const py =
+        chartY +
+        chartHeight -
+        ((d.value - minValue) / valueRange) * chartHeight;
+      return { px, py, value: d.value, year: d.year };
+    });
+
+    // Draw area under line if requested
+    if (showArea && points.length > 0) {
+      ctx.fillStyle = areaColor;
+      ctx.beginPath();
+      ctx.moveTo(chartX, chartY + chartHeight);
+      points.forEach((p) => ctx.lineTo(p.px, p.py));
+      ctx.lineTo(points[points.length - 1].px, chartY + chartHeight);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Draw line
+    if (points.length > 1) {
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      ctx.moveTo(points[0].px, points[0].py);
+      for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].px, points[i].py);
+      }
+      ctx.stroke();
+    }
+
+    // Draw data points
+    if (showPoints) {
+      ctx.fillStyle = pointColor;
+      points.forEach((p) => {
+        ctx.beginPath();
+        ctx.arc(p.px, p.py, pointRadius, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+    }
+  }
 }
