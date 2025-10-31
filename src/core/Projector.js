@@ -17,9 +17,9 @@ export class Projector {
       return [];
     }
 
-    console.log('Projecting points:', {
-      dataLength: data.length,
-    });
+    // console.log('Projecting points:', {
+    //   dataLength: data.length,
+    // });
 
     const projected = data.map((d, i) => {
       const [lng, lat] = getPosition(d);
@@ -27,9 +27,9 @@ export class Projector {
       const x = p.x;
       const y = p.y;
 
-      if (i < 3) {
-        console.log(`Point ${i}:`, { lng, lat, projected: p, transformed: { x, y } });
-      }
+      // if (i < 3) {
+      //   console.log(`Point ${i}:`, { lng, lat, projected: p, transformed: { x, y } });
+      // }
 
       return { x, y, w: getWeight(d) };
     });

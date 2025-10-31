@@ -24,3 +24,8 @@ export { GlyphUtilities } from './glyphs/GlyphUtilities.js';
 
 // Configuration
 export { ConfigManager } from './config/ConfigManager.js';
+
+// Legend module
+export { Legend } from './legend/Legend.js';
+export { LegendDataExtractor } from './legend/LegendDataExtractor.js';
+export { LegendRenderers } from './legend/LegendRenderers.js';

@@ -19,12 +19,12 @@ export class Aggregator {
     const grid = new Array(rows * cols).fill(0);
     const cellData = new Array(rows * cols).fill(null).map(() => []);
 
-    console.log('Aggregating points:', {
-      totalPoints: projectedPoints.length,
-      canvasSize: { width, height },
-      cellSize: cellSizePixels,
-      gridSize: { cols, rows },
-    });
+    // console.log('Aggregating points:', {
+    //   totalPoints: projectedPoints.length,
+    //   canvasSize: { width, height },
+    //   cellSize: cellSizePixels,
+    //   gridSize: { cols, rows },
+    // });
 
     // Aggregate points into grid cells
     for (let i = 0; i < projectedPoints.length; i++) {

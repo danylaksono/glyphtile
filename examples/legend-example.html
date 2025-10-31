@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Glyph Legend Example</title>
+    <link href="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.js"></script>
+    <script type="module">
+        import { ScreenGridLayerGL, Legend } from '../src/index.js';
+
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    'osm': {
+                        type: 'raster',
+                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256,
+                        attribution: '© OpenStreetMap contributors'
+                    }
+                },
+                layers: [
+                    { id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-opacity': 1.0 } }
+                ]
+            },
+            center: [-122.4, 37.74],
+            zoom: 11
+        });
+
+        let gridLayer = null;
+        let legend = null;
+
+        map.on('load', async () => {
+            // Load San Francisco bike parking data
+            const data = await fetch('https://raw.githubusercontent.com/visgl/deck.gl-data/master/website/sf-bike-parking.json')
+                .then(r => r.json());
+
+            console.log(`Loaded ${data.length} data points`);
+
+            // Example 1: Color Scale Legend (default)
+            gridLayer = new ScreenGridLayerGL({
+                id: 'bike-grid',
+                data: data,
+                getPosition: (d) => d.COORDINATES,
+                getWeight: (d) => d.SPACES,
+                cellSizePixels: 60,
+                colorScale: (v) => [255 * v, 200 * (1 - v), 50, 220],
+                enableGlyphs: false,
+                onAggregate: (grid) => {
+                    console.log('Grid aggregated:', {
+                        cols: grid.cols,
+                        rows: grid.rows,
+                        maxValue: Math.max(...grid.grid)
+                    });
+                }
+            });
+
+            map.addLayer(gridLayer);
+
+            // Create color scale legend
+            legend = new Legend({
+                layer: gridLayer,
+                type: 'color-scale',
+                position: 'bottom-right',
+                title: 'Bike Parking Spaces',
+                renderOptions: {
+                    unit: ' spaces',
+                    orientation: 'vertical'
+                }
+            });
+
+            // Update legend when data changes
+            setTimeout(() => {
+                if (gridLayer.gridData) {
+                    legend.update(gridLayer.gridData, gridLayer.config);
+                }
+            }, 500);
+        });
+
+        // Demo controls
+        document.getElementById('colorScaleBtn').addEventListener('click', () => {
+            if (legend) legend.remove();
+            legend = new Legend({
+                layer: gridLayer,
+                type: 'color-scale',
+                position: 'bottom-right',
+                title: 'Value Scale',
+                renderOptions: {
+                    orientation: 'vertical'
+                }
+            });
+        });
+
+        document.getElementById('categoricalBtn').addEventListener('click', async () => {
+            // Switch to glyph mode with categorical data
+            if (gridLayer) {
+                map.removeLayer(gridLayer.id);
+            }
+
+            // Simple categorical data example
+            const categoricalData = [
+                { COORDINATES: [-122.4, 37.74], TYPE: 'Secure', SPACES: 10 },
+                { COORDINATES: [-122.41, 37.75], TYPE: 'Rack', SPACES: 5 },
+                { COORDINATES: [-122.39, 37.73], TYPE: 'Secure', SPACES: 8 },
+                { COORDINATES: [-122.42, 37.76], TYPE: 'Rack', SPACES: 3 },
+            ];
+
+            // Draw pie chart glyph
+            function drawPieGlyph(ctx, x, y, normVal, cellInfo) {
+                const { cellData, glyphRadius } = cellInfo;
+                if (cellData.length === 0) return;
+
+                const types = {};
+                cellData.forEach(item => {
+                    const type = item.data.TYPE || 'Unknown';
+                    types[type] = (types[type] || 0) + 1;
+                });
+
+                const values = Object.values(types);
+                const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1'];
+                ScreenGridLayerGL.drawPieGlyph(ctx, x, y, values, glyphRadius, colors);
+            }
+
+            gridLayer = new ScreenGridLayerGL({
+                id: 'categorical-grid',
+                data: categoricalData,
+                getPosition: (d) => d.COORDINATES,
+                getWeight: (d) => d.SPACES,
+                cellSizePixels: 80,
+                enableGlyphs: true,
+                onDrawCell: drawPieGlyph,
+                glyphSize: 0.8
+            });
+
+            map.addLayer(gridLayer);
+
+            // Create categorical legend
+            if (legend) legend.remove();
+            legend = new Legend({
+                layer: gridLayer,
+                type: 'categorical',
+                position: 'bottom-right',
+                title: 'Parking Type',
+                categoryExtractor: (d) => d.TYPE || 'Unknown',
+                renderOptions: {
+                    colors: ['#ff6b6b', '#4ecdc4', '#45b7d1'],
+                    showCounts: true
+                }
+            });
+        });
+
+        document.getElementById('temporalBtn').addEventListener('click', async () => {
+            // Load time series data example
+            if (gridLayer) {
+                map.removeLayer(gridLayer.id);
+            }
+
+            // Create sample temporal data
+            const temporalData = [];
+            for (let i = 0; i < 50; i++) {
+                temporalData.push({
+                    COORDINATES: [-122.4 + (Math.random() - 0.5) * 0.1, 37.74 + (Math.random() - 0.5) * 0.1],
+                    year: 2015 + Math.floor(Math.random() * 8),
+                    value: Math.random() * 100
+                });
+            }
+
+            // Draw time series glyph
+            function drawTimeSeriesGlyph(ctx, x, y, normVal, cellInfo) {
+                const { cellData, cellSize } = cellInfo;
+                if (cellData.length === 0) return;
+
+                const yearData = {};
+                cellData.forEach(item => {
+                    const year = item.data.year;
+                    const value = item.data.value || 0;
+                    if (!yearData[year]) {
+                        yearData[year] = { year, total: 0, count: 0 };
+                    }
+                    yearData[year].total += value;
+                    yearData[year].count += 1;
+                });
+
+                const timeSeriesData = Object.values(yearData).map(d => ({
+                    year: d.year,
+                    value: d.total
+                }));
+
+                if (timeSeriesData.length > 0) {
+                    ScreenGridLayerGL.drawTimeSeriesGlyph(ctx, x, y, timeSeriesData, cellSize, {
+                        lineColor: '#3498db',
+                        pointColor: '#e74c3c',
+                        showPoints: true,
+                        showArea: true
+                    });
+                }
+            }
+
+            gridLayer = new ScreenGridLayerGL({
+                id: 'temporal-grid',
+                data: temporalData,
+                getPosition: (d) => d.COORDINATES,
+                getWeight: (d) => d.value,
+                cellSizePixels: 100,
+                enableGlyphs: true,
+                onDrawCell: drawTimeSeriesGlyph,
+                glyphSize: 0.9
+            });
+
+            map.addLayer(gridLayer);
+
+            // Create temporal legend
+            if (legend) legend.remove();
+            legend = new Legend({
+                layer: gridLayer,
+                type: 'temporal',
+                position: 'bottom-right',
+                title: 'Time Range',
+                timeExtractor: (d) => d.year,
+                valueExtractor: (d) => d.value,
+                renderOptions: {
+                    timeFormat: (t) => t.toString(),
+                    showRange: true,
+                    showSamplePoints: true
+                }
+            });
+        });
+    </script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            width: 100vw;
+            height: 100vh;
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 1001;
+        }
+        .controls h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+        }
+        .controls button {
+            display: block;
+            width: 100%;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .controls button:hover {
+            background: #f5f5f5;
+        }
+        .controls button:last-child {
+            margin-bottom: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="controls">
+        <h3>Legend Examples</h3>
+        <button id="colorScaleBtn">Color Scale Legend</button>
+        <button id="categoricalBtn">Categorical Legend</button>
+        <button id="temporalBtn">Temporal Legend</button>
+    </div>
+</body>
+</html>
+

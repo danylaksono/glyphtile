@@ -7,11 +7,12 @@
     <link href="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.js"></script>
     <script type="module">
-        import { ScreenGridLayerGL, GlyphUtilities } from '../src/index.js';
+        import { ScreenGridLayerGL, GlyphUtilities, Legend } from '../src/index.js';
 
         // Global state for hovered year reference
         let hoveredYear = null;
         let gridLayer = null;
+        let legend = null;
 
         const map = new maplibregl.Map({
             container: 'map',
@@ -290,6 +291,21 @@
             });
 
             map.addLayer(gridLayer);
+
+            // Create temporal legend
+            // legend = new Legend({
+            //     layer: gridLayer,
+            //     type: 'temporal',
+            //     position: 'bottom-left',
+            //     title: 'Carbon Saved Over Time',
+            //     timeExtractor: (d) => d.year,
+            //     valueExtractor: (d) => d.ashp_carbonsaved,
+            //     renderOptions: {
+            //         timeFormat: (t) => t.toString(),
+            //         showRange: true,
+            //         showSamplePoints: true
+            //     }
+            // });
 
             // Clear hovered year when mouse leaves the map
             map.on('mouseout', () => {

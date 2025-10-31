@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cambridge Multivariate Spatio-Temporal Data Visualization</title>
+    <link href="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@^4/dist/maplibre-gl.js"></script>
+    <script type="module">
+        import { ScreenGridLayerGL, GlyphUtilities, Legend } from '../src/index.js';
+
+        // Global state for hovered year reference
+        let hoveredYear = null;
+        let gridLayer = null;
+        let legend = null;
+
+        const map = new maplibregl.Map({
+            container: 'map',
+            // style: 'https://demotiles.maplibre.org/style.json',
+            style: {
+                    version: 8,
+                    sources: {
+                        'dark': {
+                            type: 'raster',
+                            tiles: ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'],
+                            tileSize: 256,
+                            attribution: '© OpenStreetMap contributors © CARTO'
+                        }
+                    },
+                    layers: [
+                        { id: 'dark', type: 'raster', source: 'dark', paint: { 'raster-opacity': 1.0 } }
+                    ]
+                },
+            // center shows cambridge, uk
+            center: [0.1278, 52.2053], 
+            zoom: 12
+        });
+
+        /**
+         * Custom glyph function for multivariate time series visualization
+         * Shows costs (labour, material) in bottom half and carbon saved (ashp, ev, pv) in top half
+         * Also draws reference line for hovered year if applicable
+         */
+        function drawMultivariateTimeSeriesGlyph(ctx, x, y, normVal, cellInfo) {
+            const { cellData, cellSize } = cellInfo;
+            
+            if (!cellData || cellData.length === 0) return;
+
+            // Group data by year and aggregate all variables
+            const yearData = {};
+            
+            cellData.forEach(item => {
+                const year = item.data.year;
+                if (year == null) return;
+                
+                if (!yearData[year]) {
+                    yearData[year] = {
+                        year: year,
+                        // Carbon saved variables
+                        ashp_carbonsaved: 0,
+                        ev_carbonsaved: 0,
+                        pv_carbonsaved: 0,
+                        // Cost variables
+                        labour_cost: 0,
+                        material_cost: 0,
+                        // Counts for averages (if needed)
+                        counts: {
+                            ashp: 0,
+                            ev: 0,
+                            pv: 0,
+                            labour: 0,
+                            material: 0
+                        }
+                    };
+                }
+                
+                const yd = yearData[year];
+                
+                // Aggregate carbon saved variables
+                if (item.data.ashp_carbonsaved != null && !isNaN(item.data.ashp_carbonsaved)) {
+                    yd.ashp_carbonsaved += item.data.ashp_carbonsaved;
+                    yd.counts.ashp += 1;
+                }
+                if (item.data.ev_carbonsaved != null && !isNaN(item.data.ev_carbonsaved)) {
+                    yd.ev_carbonsaved += item.data.ev_carbonsaved;
+                    yd.counts.ev += 1;
+                }
+                if (item.data.pv_carbonsaved != null && !isNaN(item.data.pv_carbonsaved)) {
+                    yd.pv_carbonsaved += item.data.pv_carbonsaved;
+                    yd.counts.pv += 1;
+                }
+                
+                // Aggregate cost variables
+                if (item.data.labour_cost != null && !isNaN(item.data.labour_cost)) {
+                    yd.labour_cost += item.data.labour_cost;
+                    yd.counts.labour += 1;
+                }
+                if (item.data.material_cost != null && !isNaN(item.data.material_cost)) {
+                    yd.material_cost += item.data.material_cost;
+                    yd.counts.material += 1;
+                }
+            });
+
+            // Convert to series format for multivariate chart
+            const years = Object.keys(yearData).map(y => parseInt(y)).sort((a, b) => a - b);
+            if (years.length === 0) return;
+
+            const minYear = Math.min(...years);
+            const maxYear = Math.max(...years);
+
+            // Build series arrays
+            const carbonSeries = [
+                {
+                    data: years.map(year => ({
+                        year: year,
+                        value: yearData[year].ashp_carbonsaved || null
+                    })).filter(d => d.value != null),
+                    color: '#2ecc71' // Green for ASHP
+                },
+                {
+                    data: years.map(year => ({
+                        year: year,
+                        value: yearData[year].ev_carbonsaved || null
+                    })).filter(d => d.value != null),
+                    color: '#3498db' // Blue for EV
+                },
+                {
+                    data: years.map(year => ({
+                        year: year,
+                        value: yearData[year].pv_carbonsaved || null
+                    })).filter(d => d.value != null),
+                    color: '#9b59b6' // Purple for PV
+                }
+            ].filter(s => s.data.length > 0);
+
+            const costSeries = [
+                {
+                    data: years.map(year => ({
+                        year: year,
+                        value: yearData[year].labour_cost || null
+                    })).filter(d => d.value != null),
+                    color: '#e74c3c' // Red for labour
+                },
+                {
+                    data: years.map(year => ({
+                        year: year,
+                        value: yearData[year].material_cost || null
+                    })).filter(d => d.value != null),
+                    color: '#f39c12' // Orange for material
+                }
+            ].filter(s => s.data.length > 0);
+
+            // Draw multivariate chart - self-contained implementation
+            const padding = 0.12;
+            const lineWidth = 1.8;
+            const showArea = true;
+            const dividerLineWidth = 1;
+            const dividerColor = 'rgba(150, 150, 150, 0.6)';
+
+            // Calculate overall chart dimensions
+            const chartWidth = cellSize * (1 - 2 * padding);
+            const chartHeight = cellSize * (1 - 2 * padding);
+            const chartX = x - chartWidth / 2;
+            const chartY = y - chartHeight / 2;
+
+            // Helper function to draw a group of series in a sub-chart area
+            // mirrored: if true, chart starts from areaY and goes down (for bottom half)
+            const drawSeriesGroup = (seriesArray, areaY, areaHeight, mirrored = false) => {
+                if (!seriesArray || seriesArray.length === 0) return;
+
+                // Collect all years and values from all series
+                const allYears = new Set();
+                const allValues = [];
+                
+                seriesArray.forEach(series => {
+                    if (series.data && series.data.length > 0) {
+                        series.data.forEach(d => {
+                            if (d.year != null) allYears.add(d.year);
+                            if (d.value != null && !isNaN(d.value)) allValues.push(d.value);
+                        });
+                    }
+                });
+
+                if (allYears.size === 0 || allValues.length === 0) return;
+
+                const years = Array.from(allYears).sort((a, b) => a - b);
+                const minYear = Math.min(...years);
+                const maxYear = Math.max(...years);
+                const yearRange = maxYear - minYear || 1;
+
+                const minValue = Math.min(...allValues);
+                const maxValue = Math.max(...allValues);
+                const valueRange = maxValue - minValue || 1;
+
+                // Draw each series
+                seriesArray.forEach((series) => {
+                    if (!series.data || series.data.length === 0) return;
+
+                    const color = series.color;
+                    const validData = series.data
+                        .filter(d => d.value != null && !isNaN(d.value))
+                        .sort((a, b) => a.year - b.year);
+
+                    if (validData.length === 0) return;
+
+                    // Map points to pixel coordinates
+                    const points = validData.map(d => {
+                        const px = chartX + ((d.year - minYear) / yearRange) * chartWidth;
+                        // For mirrored (bottom), values start at areaY and go down
+                        // For normal (top), values start at bottom and go up
+                        const py = mirrored 
+                            ? areaY + ((d.value - minValue) / valueRange) * areaHeight
+                            : areaY + areaHeight - ((d.value - minValue) / valueRange) * areaHeight;
+                        return { px, py, value: d.value, year: d.year };
+                    });
+
+                    // Draw area under/over line if requested
+                    if (showArea && points.length > 0) {
+                        // Convert hex color to rgba with transparency
+                        let areaColor = color;
+                        if (color.startsWith('#')) {
+                            const r = parseInt(color.slice(1, 3), 16);
+                            const g = parseInt(color.slice(3, 5), 16);
+                            const b = parseInt(color.slice(5, 7), 16);
+                            areaColor = `rgba(${r}, ${g}, ${b}, 0.15)`;
+                        } else if (color.startsWith('rgb(')) {
+                            areaColor = color.replace('rgb(', 'rgba(').replace(')', ', 0.15)');
+                        } else if (color.startsWith('rgba(')) {
+                            // Already rgba, just adjust alpha
+                            areaColor = color.replace(/,\s*[\d.]+\)/, ', 0.15)');
+                        }
+                        ctx.fillStyle = areaColor;
+                        ctx.beginPath();
+                        // For mirrored, area starts from top (areaY), for normal from bottom
+                        ctx.moveTo(chartX, mirrored ? areaY : areaY + areaHeight);
+                        points.forEach(p => ctx.lineTo(p.px, p.py));
+                        ctx.lineTo(points[points.length - 1].px, mirrored ? areaY : areaY + areaHeight);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+
+                    // Draw line
+                    if (points.length > 1) {
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = lineWidth;
+                        ctx.beginPath();
+                        ctx.moveTo(points[0].px, points[0].py);
+                        for (let i = 1; i < points.length; i++) {
+                            ctx.lineTo(points[i].px, points[i].py);
+                        }
+                        ctx.stroke();
+                    }
+                });
+            };
+
+            // Determine layout
+            const hasTop = carbonSeries.length > 0;
+            const hasBottom = costSeries.length > 0;
+            
+            if (!hasTop && !hasBottom) return;
+
+            let topAreaY, topAreaHeight, bottomAreaY, bottomAreaHeight;
+
+            if (hasTop && hasBottom) {
+                // Split screen: top and bottom halves
+                const halfHeight = chartHeight / 2;
+                topAreaY = chartY;
+                topAreaHeight = halfHeight;
+                bottomAreaY = chartY + halfHeight;
+                bottomAreaHeight = halfHeight;
+
+                // Draw divider line
+                ctx.strokeStyle = dividerColor;
+                ctx.lineWidth = dividerLineWidth;
+                ctx.beginPath();
+                ctx.moveTo(chartX, chartY + halfHeight);
+                ctx.lineTo(chartX + chartWidth, chartY + halfHeight);
+                ctx.stroke();
+            } else if (hasTop) {
+                // Only top group - use full height
+                topAreaY = chartY;
+                topAreaHeight = chartHeight;
+            } else {
+                // Only bottom group - use full height
+                bottomAreaY = chartY;
+                bottomAreaHeight = chartHeight;
+            }
+
+            // Draw top group (carbon saved) - normal orientation
+            if (hasTop) {
+                drawSeriesGroup(carbonSeries, topAreaY, topAreaHeight, false);
+            }
+
+            // Draw bottom group (costs) - mirrored (starts from divider, goes down)
+            if (hasBottom) {
+                drawSeriesGroup(costSeries, bottomAreaY, bottomAreaHeight, true);
+            }
+
+            // Draw reference line for hovered year if it exists in this cell's data
+            if (hoveredYear !== null && hoveredYear >= minYear && hoveredYear <= maxYear) {
+                const yearRange = maxYear - minYear || 1;
+                
+                // Calculate x position for the hovered year
+                const yearX = chartX + ((hoveredYear - minYear) / yearRange) * chartWidth;
+                
+                // Draw vertical reference line across entire chart
+                ctx.strokeStyle = 'rgba(150, 150, 150, 0.7)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([3, 3]); // Dashed line
+                ctx.beginPath();
+                ctx.moveTo(yearX, chartY);
+                ctx.lineTo(yearX, chartY + chartHeight);
+                ctx.stroke();
+                ctx.setLineDash([]); // Reset dash
+                
+                // Draw year label at the bottom of the chart
+                ctx.fillStyle = 'rgba(150, 150, 150, 0.9)';
+                ctx.font = 'bold 9px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillText(hoveredYear.toString(), yearX, chartY + chartHeight + 2);
+            }
+        }
+
+        map.on('load', async () => {
+            // Load cambridge data
+            const data = await fetch('./data/cambridge.json').then(r => r.json());
+            
+            console.log(`Loaded ${data.length} data points`);
+            console.log('Sample data:', data[0]);
+
+            // Filter to include entries with valid coordinates and at least one variable
+            const validData = data.filter(d => 
+                d.lat != null && 
+                d.lon != null && 
+                d.year != null &&
+                // Include if has at least one carbon saved variable or one cost variable
+                (d.ashp_carbonsaved != null || d.ev_carbonsaved != null || d.pv_carbonsaved != null ||
+                 d.labour_cost != null || d.material_cost != null)
+            );
+
+            console.log(`Using ${validData.length} valid data points`);
+
+            gridLayer = new ScreenGridLayerGL({
+                id: 'cambridge-timeseries',
+                data: validData,
+                getPosition: (d) => [d.lon, d.lat],
+                getWeight: (d) => (d.ashp_carbonsaved || 0) + (d.total_cost || 0) / 1000, // Combine weights
+                cellSizePixels: 80,
+                colorScale: (v) => [255 * v, 200 * (1 - v), 50, 180],
+                enableGlyphs: true,
+                glyphSize: 0.9,
+                onDrawCell: drawMultivariateTimeSeriesGlyph,
+                onAggregate: (grid) => {
+                    console.log('Grid aggregated:', {
+                        cols: grid.cols,
+                        rows: grid.rows,
+                        cellsWithData: grid.grid.filter(v => v > 0).length,
+                        maxValue: Math.max(...grid.grid)
+                    });
+                },
+                onHover: ({ cell, event }) => {
+                    // Clear reference line if hovering over cell without data
+                    if (!cell || !cell.cellData || cell.cellData.length === 0) {
+                        if (hoveredYear !== null) {
+                            hoveredYear = null;
+                            gridLayer.render();
+                        }
+                        return;
+                    }
+
+                    // Group by year for display - collect all variables
+                    const yearGroups = {};
+                    cell.cellData.forEach(item => {
+                        const year = item.data.year;
+                        if (!yearGroups[year]) {
+                            yearGroups[year] = {
+                                ashp_carbonsaved: 0,
+                                ev_carbonsaved: 0,
+                                pv_carbonsaved: 0,
+                                labour_cost: 0,
+                                material_cost: 0,
+                                count: 0
+                            };
+                        }
+                        const yg = yearGroups[year];
+                        if (item.data.ashp_carbonsaved != null) yg.ashp_carbonsaved += item.data.ashp_carbonsaved;
+                        if (item.data.ev_carbonsaved != null) yg.ev_carbonsaved += item.data.ev_carbonsaved;
+                        if (item.data.pv_carbonsaved != null) yg.pv_carbonsaved += item.data.pv_carbonsaved;
+                        if (item.data.labour_cost != null) yg.labour_cost += item.data.labour_cost;
+                        if (item.data.material_cost != null) yg.material_cost += item.data.material_cost;
+                        yg.count += 1;
+                    });
+                    
+                    // Calculate which year the mouse is over based on x position within cell
+                    const cellSize = gridLayer.config.cellSizePixels;
+                    const mouseX = event.point.x;
+                    
+                    // Calculate relative position within the cell (0 to 1)
+                    // cell.x is the left edge of the cell in canvas coordinates
+                    const relativeX = (mouseX - cell.x) / cellSize;
+                    
+                    // Get year range for this cell
+                    const years = Object.keys(yearGroups).map(y => parseInt(y)).sort((a, b) => a - b);
+                    if (years.length > 0) {
+                        const minYear = Math.min(...years);
+                        const maxYear = Math.max(...years);
+                        const yearRange = maxYear - minYear || 1;
+                        
+                        // Calculate year based on mouse x position within the chart area
+                        // Account for padding: chart starts at padding, ends at (1 - padding)
+                        const padding = 0.12; // Match the padding used in glyph drawing
+                        const chartStart = padding;
+                        const chartEnd = 1 - padding;
+                        const chartWidth = chartEnd - chartStart;
+                        
+                        // Normalize relativeX to chart area
+                        const normalizedX = (relativeX - chartStart) / chartWidth;
+                        const clampedX = Math.max(0, Math.min(1, normalizedX));
+                        
+                        const calculatedYear = Math.round(minYear + clampedX * yearRange);
+                        
+                        // Only update if year is valid and in range
+                        if (calculatedYear >= minYear && calculatedYear <= maxYear) {
+                            hoveredYear = calculatedYear;
+                            // Trigger re-render to show reference lines
+                            gridLayer.render();
+                        }
+                    } else {
+                        // No valid years found, clear reference line
+                        if (hoveredYear !== null) {
+                            hoveredYear = null;
+                            gridLayer.render();
+                        }
+                    }
+                    
+                    const yearSummary = Object.keys(yearGroups)
+                        .sort()
+                        .map(year => {
+                            const yg = yearGroups[year];
+                            const parts = [];
+                            if (yg.ashp_carbonsaved > 0) parts.push(`ASHP: ${yg.ashp_carbonsaved.toFixed(1)} kg CO₂`);
+                            if (yg.ev_carbonsaved > 0) parts.push(`EV: ${yg.ev_carbonsaved.toFixed(1)} kg CO₂`);
+                            if (yg.pv_carbonsaved > 0) parts.push(`PV: ${yg.pv_carbonsaved.toFixed(1)} kg CO₂`);
+                            if (yg.labour_cost > 0) parts.push(`Labour: £${yg.labour_cost.toFixed(0)}`);
+                            if (yg.material_cost > 0) parts.push(`Material: £${yg.material_cost.toFixed(0)}`);
+                            return `${year}: ${parts.join(', ')}`;
+                        })
+                        .join('\n');
+                    
+                    // console.log(`Cell at [${cell.col}, ${cell.row}]:\n${yearSummary}`);
+                    if (hoveredYear !== null) {
+                        console.log(`Hovered year: ${hoveredYear}`);
+                    }
+                },
+                onClick: ({ cell }) => {
+                    if (cell.cellData && cell.cellData.length > 0) {
+                        const yearGroups = {};
+                        cell.cellData.forEach(item => {
+                            const year = item.data.year;
+                            if (!yearGroups[year]) {
+                                yearGroups[year] = {
+                                    ashp_carbonsaved: 0,
+                                    ev_carbonsaved: 0,
+                                    pv_carbonsaved: 0,
+                                    labour_cost: 0,
+                                    material_cost: 0,
+                                    count: 0
+                                };
+                            }
+                            const yg = yearGroups[year];
+                            if (item.data.ashp_carbonsaved != null) yg.ashp_carbonsaved += item.data.ashp_carbonsaved;
+                            if (item.data.ev_carbonsaved != null) yg.ev_carbonsaved += item.data.ev_carbonsaved;
+                            if (item.data.pv_carbonsaved != null) yg.pv_carbonsaved += item.data.pv_carbonsaved;
+                            if (item.data.labour_cost != null) yg.labour_cost += item.data.labour_cost;
+                            if (item.data.material_cost != null) yg.material_cost += item.data.material_cost;
+                            yg.count += 1;
+                        });
+                        
+                        const yearSummary = Object.keys(yearGroups)
+                            .sort()
+                            .map(year => {
+                                const yg = yearGroups[year];
+                                const parts = [];
+                                if (yg.ashp_carbonsaved > 0) parts.push(`ASHP: ${yg.ashp_carbonsaved.toFixed(1)} kg CO₂`);
+                                if (yg.ev_carbonsaved > 0) parts.push(`EV: ${yg.ev_carbonsaved.toFixed(1)} kg CO₂`);
+                                if (yg.pv_carbonsaved > 0) parts.push(`PV: ${yg.pv_carbonsaved.toFixed(1)} kg CO₂`);
+                                if (yg.labour_cost > 0) parts.push(`Labour: £${yg.labour_cost.toFixed(0)}`);
+                                if (yg.material_cost > 0) parts.push(`Material: £${yg.material_cost.toFixed(0)}`);
+                                return `${year} (${yg.count} points):\n  ${parts.join('\n  ')}`;
+                            })
+                            .join('\n\n');
+                        
+                        alert(`Cell Details:\n\n${yearSummary}\n\nTotal data points: ${cell.cellData.length}`);
+                    }
+                }
+            });
+
+            map.addLayer(gridLayer);
+
+            // Create custom multivariate legend
+            const createMultivariateLegend = () => {
+                const legendContainer = document.createElement('div');
+                legendContainer.id = 'multivariate-legend';
+                legendContainer.style.cssText = `
+                    position: absolute;
+                    bottom: 20px;
+                    left: 20px;
+                    background: rgba(0, 0, 0, 0.8);
+                    color: white;
+                    padding: 15px;
+                    border-radius: 8px;
+                    font-family: Arial, sans-serif;
+                    font-size: 12px;
+                    z-index: 1000;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+                `;
+
+                const title = document.createElement('div');
+                title.textContent = 'Multivariate Time Series';
+                title.style.cssText = 'font-weight: bold; margin-bottom: 12px; font-size: 14px;';
+                legendContainer.appendChild(title);
+
+                // Carbon Saved section (top half)
+                const carbonSection = document.createElement('div');
+                carbonSection.style.cssText = 'margin-bottom: 12px;';
+                const carbonTitle = document.createElement('div');
+                carbonTitle.textContent = 'Carbon Saved (top)';
+                carbonTitle.style.cssText = 'font-weight: bold; margin-bottom: 6px; color: #aaa; font-size: 11px;';
+                carbonSection.appendChild(carbonTitle);
+
+                const carbonItems = [
+                    { name: 'ASHP', color: '#2ecc71' },
+                    { name: 'EV', color: '#3498db' },
+                    { name: 'PV', color: '#9b59b6' }
+                ];
+
+                carbonItems.forEach(item => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px;';
+                    const colorBox = document.createElement('div');
+                    colorBox.style.cssText = `width: 16px; height: 3px; background: ${item.color}; margin-right: 8px;`;
+                    const label = document.createElement('span');
+                    label.textContent = item.name;
+                    itemDiv.appendChild(colorBox);
+                    itemDiv.appendChild(label);
+                    carbonSection.appendChild(itemDiv);
+                });
+                legendContainer.appendChild(carbonSection);
+
+                // Divider
+                const divider = document.createElement('div');
+                divider.style.cssText = 'height: 1px; background: rgba(150, 150, 150, 0.5); margin: 8px 0;';
+                legendContainer.appendChild(divider);
+
+                // Costs section (bottom half - mirrored)
+                const costSection = document.createElement('div');
+                const costTitle = document.createElement('div');
+                costTitle.textContent = 'Costs (bottom, mirrored)';
+                costTitle.style.cssText = 'font-weight: bold; margin-bottom: 6px; color: #aaa; font-size: 11px;';
+                costSection.appendChild(costTitle);
+
+                const costItems = [
+                    { name: 'Labour', color: '#e74c3c' },
+                    { name: 'Material', color: '#f39c12' }
+                ];
+
+                costItems.forEach(item => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px;';
+                    const colorBox = document.createElement('div');
+                    colorBox.style.cssText = `width: 16px; height: 3px; background: ${item.color}; margin-right: 8px;`;
+                    const label = document.createElement('span');
+                    label.textContent = item.name;
+                    itemDiv.appendChild(colorBox);
+                    itemDiv.appendChild(label);
+                    costSection.appendChild(itemDiv);
+                });
+                legendContainer.appendChild(costSection);
+
+                // Note about mirroring
+                const note = document.createElement('div');
+                note.textContent = 'Bottom chart mirrored (starts from center)';
+                note.style.cssText = 'margin-top: 8px; font-size: 10px; color: #888; font-style: italic;';
+                legendContainer.appendChild(note);
+
+                return legendContainer;
+            };
+
+            // Remove old legend if exists and add new custom legend
+            if (legend) legend.remove();
+            const customLegend = createMultivariateLegend();
+            document.getElementById('map').appendChild(customLegend);
+
+            // Clear hovered year when mouse leaves the map
+            map.on('mouseout', () => {
+                hoveredYear = null;
+                gridLayer.render();
+            });
+        });
+    </script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+</body>
+</html>
+
