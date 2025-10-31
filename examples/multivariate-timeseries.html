@@ -13,6 +13,7 @@
         let hoveredYear = null;
         let gridLayer = null;
         let legend = null;
+        let infoWidget = null;
 
         const map = new maplibregl.Map({
             container: 'map',
@@ -366,6 +367,7 @@
                             hoveredYear = null;
                             gridLayer.render();
                         }
+                        updateInfoWidget(null, null);
                         return;
                     }
 
@@ -425,32 +427,16 @@
                             hoveredYear = calculatedYear;
                             // Trigger re-render to show reference lines
                             gridLayer.render();
+                            // Update info widget with hovered year data
+                            updateInfoWidget(calculatedYear, yearGroups[calculatedYear]);
                         }
                     } else {
                         // No valid years found, clear reference line
                         if (hoveredYear !== null) {
                             hoveredYear = null;
                             gridLayer.render();
+                            updateInfoWidget(null, null);
                         }
-                    }
-                    
-                    const yearSummary = Object.keys(yearGroups)
-                        .sort()
-                        .map(year => {
-                            const yg = yearGroups[year];
-                            const parts = [];
-                            if (yg.ashp_carbonsaved > 0) parts.push(`ASHP: ${yg.ashp_carbonsaved.toFixed(1)} kg CO₂`);
-                            if (yg.ev_carbonsaved > 0) parts.push(`EV: ${yg.ev_carbonsaved.toFixed(1)} kg CO₂`);
-                            if (yg.pv_carbonsaved > 0) parts.push(`PV: ${yg.pv_carbonsaved.toFixed(1)} kg CO₂`);
-                            if (yg.labour_cost > 0) parts.push(`Labour: £${yg.labour_cost.toFixed(0)}`);
-                            if (yg.material_cost > 0) parts.push(`Material: £${yg.material_cost.toFixed(0)}`);
-                            return `${year}: ${parts.join(', ')}`;
-                        })
-                        .join('\n');
-                    
-                    // console.log(`Cell at [${cell.col}, ${cell.row}]:\n${yearSummary}`);
-                    if (hoveredYear !== null) {
-                        console.log(`Hovered year: ${hoveredYear}`);
                     }
                 },
                 onClick: ({ cell }) => {
@@ -592,10 +578,135 @@
             const customLegend = createMultivariateLegend();
             document.getElementById('map').appendChild(customLegend);
 
+            // Create info widget for hovered values
+            const createInfoWidget = () => {
+                const widget = document.createElement('div');
+                widget.id = 'info-widget';
+                widget.style.cssText = `
+                    position: absolute;
+                    top: 20px;
+                    right: 20px;
+                    background: rgba(0, 0, 0, 0.85);
+                    color: white;
+                    padding: 12px 15px;
+                    border-radius: 8px;
+                    font-family: Arial, sans-serif;
+                    font-size: 11px;
+                    z-index: 1000;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+                    min-width: 200px;
+                    display: none;
+                `;
+                return widget;
+            };
+
+            infoWidget = createInfoWidget();
+            document.getElementById('map').appendChild(infoWidget);
+
+            // Function to update info widget with hovered values
+            const updateInfoWidget = (year, yearData) => {
+                if (!infoWidget) return;
+
+                if (!year || !yearData) {
+                    infoWidget.style.display = 'none';
+                    return;
+                }
+
+                // Show widget
+                infoWidget.style.display = 'block';
+                infoWidget.innerHTML = '';
+
+                // Year header
+                const yearHeader = document.createElement('div');
+                yearHeader.textContent = `Year: ${year}`;
+                yearHeader.style.cssText = 'font-weight: bold; margin-bottom: 10px; font-size: 13px; color: #fff; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 6px;';
+                infoWidget.appendChild(yearHeader);
+
+                // Carbon Saved section
+                const carbonSection = document.createElement('div');
+                carbonSection.style.cssText = 'margin-bottom: 8px;';
+                const carbonTitle = document.createElement('div');
+                carbonTitle.textContent = 'Carbon Saved';
+                carbonTitle.style.cssText = 'font-weight: bold; margin-bottom: 4px; color: #aaa; font-size: 10px; text-transform: uppercase;';
+                carbonSection.appendChild(carbonTitle);
+
+                const carbonParams = [
+                    { name: 'ASHP', value: yearData.ashp_carbonsaved, color: '#2ecc71', unit: 'kg CO₂' },
+                    { name: 'EV', value: yearData.ev_carbonsaved, color: '#3498db', unit: 'kg CO₂' },
+                    { name: 'PV', value: yearData.pv_carbonsaved, color: '#9b59b6', unit: 'kg CO₂' }
+                ];
+
+                carbonParams.forEach(param => {
+                    if (param.value > 0) {
+                        const paramDiv = document.createElement('div');
+                        paramDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;';
+                        const labelSpan = document.createElement('span');
+                        labelSpan.style.cssText = 'display: flex; align-items: center;';
+                        const colorDot = document.createElement('span');
+                        colorDot.style.cssText = `width: 8px; height: 8px; background: ${param.color}; border-radius: 50%; margin-right: 6px; display: inline-block;`;
+                        labelSpan.appendChild(colorDot);
+                        labelSpan.appendChild(document.createTextNode(param.name + ':'));
+                        const valueSpan = document.createElement('span');
+                        valueSpan.textContent = `${param.value.toFixed(1)} ${param.unit}`;
+                        valueSpan.style.cssText = 'font-weight: bold;';
+                        paramDiv.appendChild(labelSpan);
+                        paramDiv.appendChild(valueSpan);
+                        carbonSection.appendChild(paramDiv);
+                    }
+                });
+                infoWidget.appendChild(carbonSection);
+
+                // Divider
+                const divider = document.createElement('div');
+                divider.style.cssText = 'height: 1px; background: rgba(150, 150, 150, 0.3); margin: 6px 0;';
+                infoWidget.appendChild(divider);
+
+                // Costs section
+                const costSection = document.createElement('div');
+                const costTitle = document.createElement('div');
+                costTitle.textContent = 'Costs';
+                costTitle.style.cssText = 'font-weight: bold; margin-bottom: 4px; color: #aaa; font-size: 10px; text-transform: uppercase;';
+                costSection.appendChild(costTitle);
+
+                const costParams = [
+                    { name: 'Labour', value: yearData.labour_cost, color: '#e74c3c', unit: '£' },
+                    { name: 'Material', value: yearData.material_cost, color: '#f39c12', unit: '£' }
+                ];
+
+                costParams.forEach(param => {
+                    if (param.value > 0) {
+                        const paramDiv = document.createElement('div');
+                        paramDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;';
+                        const labelSpan = document.createElement('span');
+                        labelSpan.style.cssText = 'display: flex; align-items: center;';
+                        const colorDot = document.createElement('span');
+                        colorDot.style.cssText = `width: 8px; height: 8px; background: ${param.color}; border-radius: 50%; margin-right: 6px; display: inline-block;`;
+                        labelSpan.appendChild(colorDot);
+                        labelSpan.appendChild(document.createTextNode(param.name + ':'));
+                        const valueSpan = document.createElement('span');
+                        valueSpan.textContent = `${param.unit}${param.value.toFixed(0)}`;
+                        valueSpan.style.cssText = 'font-weight: bold;';
+                        paramDiv.appendChild(labelSpan);
+                        paramDiv.appendChild(valueSpan);
+                        costSection.appendChild(paramDiv);
+                    }
+                });
+                infoWidget.appendChild(costSection);
+
+                // Data points count
+                if (yearData.count > 0) {
+                    const countDiv = document.createElement('div');
+                    countDiv.textContent = `${yearData.count} data point${yearData.count !== 1 ? 's' : ''}`;
+                    countDiv.style.cssText = 'margin-top: 8px; font-size: 9px; color: #888; font-style: italic; text-align: center; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.1);';
+                    infoWidget.appendChild(countDiv);
+                }
+            };
+
             // Clear hovered year when mouse leaves the map
             map.on('mouseout', () => {
                 hoveredYear = null;
                 gridLayer.render();
+                updateInfoWidget(null, null);
             });
         });
     </script>

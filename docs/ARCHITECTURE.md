@@ -99,6 +99,8 @@ const projected = projector.project(
 - `Aggregator.aggregate(projectedPoints, originalData, width, height, cellSize)` - Static
 - `getStats(aggregationResult)` - Get grid statistics
 
+📖 **For detailed explanation of the aggregation and normalization process, see [API_REFERENCE.md](./API_REFERENCE.md#data-normalization-and-aggregation-procedure)**
+
 **Usage:**
 ```javascript
 import { Aggregator } from 'screengrid';

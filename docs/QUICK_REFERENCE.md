@@ -1,5 +1,9 @@
 # ScreenGrid Quick Reference Guide
 
+> 📖 **For complete API documentation with detailed parameter descriptions, return types, and comprehensive examples, see [API_REFERENCE.md](./API_REFERENCE.md)**
+
+This guide provides quick lookup snippets and common patterns. Use it when you know what you're looking for and need a quick reminder.
+
 ## 📦 Module Import Paths
 
 ```javascript
@@ -375,9 +379,11 @@ const layer = new ScreenGridLayerGL({
 
 ## 📚 Documentation
 
-- **Full API docs:** `docs/ARCHITECTURE.md`
-- **Usage examples:** `docs/USAGE.md`
-- **Refactoring details:** `REFACTORING_SUMMARY.md`
+- **Complete API Reference:** `docs/API_REFERENCE.md` - Comprehensive API documentation with all methods, parameters, and examples
+- **Architecture Guide:** `docs/ARCHITECTURE.md` - Module design and architecture details
+- **Usage Guide:** `docs/USAGE.md` - Development and troubleshooting
+- **Glyph Drawing Guide:** `docs/GLYPH_DRAWING_GUIDE.md` - Comprehensive glyph visualization guide
+- **Spatio-Temporal Guide:** `docs/SPATIO_TEMPORAL_GUIDE.md` - Time series visualization patterns
 
 ---
 

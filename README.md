@@ -1,6 +1,10 @@
 # ScreenGrid Library v2.0
 
+[![npm](https://img.shields.io/npm/v/screengrid.svg)](https://www.npmjs.com/package/screengrid)
+
 A GPU/Canvas hybrid Screen-Space Grid Aggregation library for MapLibre GL JS. This library provides efficient real-time aggregation of point data into screen-space grids with customizable styling, interactive features, and advanced glyph drawing capabilities.
+
+![](./screengrid.png)
 
 ## 🚀 Features
 
@@ -32,7 +36,11 @@ screengrid/
 │   ├── events/                     # Event system
 │   │   ├── EventBinder.js
 │   │   └── EventHandlers.js
-│   └── glyphs/GlyphUtilities.js    # Glyph drawing utilities
+│   ├── glyphs/GlyphUtilities.js    # Glyph drawing utilities
+│   └── legend/                     # Legend system
+│       ├── Legend.js
+│       ├── LegendDataExtractor.js
+│       └── LegendRenderers.js
 ├── dist/                           # Built distribution files
 ├── docs/
 │   ├── ARCHITECTURE.md             # Detailed architecture guide
@@ -41,10 +49,12 @@ screengrid/
 ├── examples/
 │   ├── index.html
 │   ├── simple-test.html
-│   └── test.html
+│   ├── test.html
+│   ├── legend-example.html
+│   ├── timeseries.html
+│   └── multivariate-timeseries.html
 ├── package.json
-├── rollup.config.mjs
-└── server.py
+└── rollup.config.mjs
 ```
 
 ## 🚀 Quick Start
@@ -63,6 +73,10 @@ git clone https://github.com/danylaksono/screengrid.git
 cd screengrid
 npm install
 npm run build
+
+# To run examples locally, use a simple HTTP server:
+npx http-server -p 8000
+# Then open http://localhost:8000/examples/ in your browser
 ```
 
 ### Basic Usage
@@ -164,7 +178,16 @@ const maplibregl = require('maplibre-gl');
 `maplibre-gl` is a peer dependency and is not bundled. In UMD builds, it is expected as a global `maplibregl`.                                                                                                                                             
 ## 🎨 Glyph Drawing
 
-The library supports custom glyph drawing through the `onDrawCell` callback:
+The library supports custom glyph drawing through the `onDrawCell` callback. This enables rich multivariate visualizations including time series, categorical breakdowns, and complex relationships.
+
+📖 **📚 Comprehensive Guide**: See [docs/GLYPH_DRAWING_GUIDE.md](./docs/GLYPH_DRAWING_GUIDE.md) for detailed documentation on:
+- All built-in glyph utilities (8 types including time series)
+- Custom glyph implementation patterns
+- Multivariate data visualization techniques
+- Time series and spatio-temporal visualization
+- Advanced patterns and best practices
+
+### Quick Example
 
 ```javascript
 const gridLayer = new ScreenGridLayerGL({
@@ -198,9 +221,21 @@ const gridLayer = new ScreenGridLayerGL({
 
 ### Running the Examples
 
-1. **Full Demo**: Open `examples/index.html` - Complete interactive demo with all features
-2. **Simple Test**: Open `examples/simple-test.html` - Basic functionality verification
-3. **Original Test**: Open `examples/test.html` - Original test implementation
+To run the examples locally:
+
+```bash
+npx http-server -p 8000
+# Then open http://localhost:8000/examples/ in your browser
+```
+
+### Available Examples
+
+1. **Full Demo** (`examples/index.html`) - Complete interactive demo with all features
+2. **Simple Test** (`examples/simple-test.html`) - Basic functionality verification
+3. **Original Test** (`examples/test.html`) - Original test implementation
+4. **Legend Example** (`examples/legend-example.html`) - Demonstrates legend functionality
+5. **Time Series** (`examples/timeseries.html`) - Temporal data visualization
+6. **Multivariate Time Series** (`examples/multivariate-timeseries.html`) - Advanced multi-attribute temporal visualization
 
 ### Example Features
 
@@ -208,6 +243,8 @@ const gridLayer = new ScreenGridLayerGL({
 - **Visualization Modes**: Color-based and Glyph-based rendering
 - **Interactive Controls**: Real-time parameter adjustment
 - **Live Preview**: Glyph preview and real-time updates
+- **Legend Support**: Dynamic legend generation for various visualization types
+- **Time Series**: Temporal data aggregation and visualization
 - **Debug Information**: Console logging and status updates
 
 ## 🔧 API Reference
@@ -260,6 +297,35 @@ ScreenGridLayerGL.drawHeatmapGlyph(ctx, x, y, radius, normalizedValue, colorScal
 // Radial bar chart glyph (v2.0.0+)
 ScreenGridLayerGL.drawRadialBarGlyph(ctx, x, y, values, maxValue, maxRadius, color);
 ```
+
+## 📊 Legend Module
+
+The library includes a powerful Legend module for automatically generating data-driven legends:
+
+```javascript
+import { Legend } from 'screengrid';
+
+// Create a legend connected to your grid layer
+const legend = new Legend({
+  layer: gridLayer,
+  type: 'auto', // 'color-scale', 'categorical', 'temporal', 'size-scale', 'auto', 'multi'
+  position: 'bottom-right', // 'top-left', 'top-right', 'bottom-left', 'bottom-right'
+  title: 'Data Legend'
+});
+
+// The legend automatically updates when the grid is aggregated
+```
+
+### Legend Types
+
+- **`color-scale`**: Continuous color scale legend
+- **`categorical`**: Categorical/discrete values legend
+- **`temporal`**: Time-based legend for temporal data
+- **`size-scale`**: Size-based legend
+- **`auto`**: Automatically detects the best legend type
+- **`multi`**: Multi-attribute legend for complex visualizations
+
+See `examples/legend-example.html` for detailed usage examples.
 
 ## 🐛 Troubleshooting
 

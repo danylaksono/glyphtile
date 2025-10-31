@@ -1,6 +1,6 @@
 {
   "name": "screengrid",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "A GPU/Canvas hybrid Screen-Space Grid Aggregation library for MapLibre GL JS with advanced glyph drawing capabilities",
   "main": "dist/screengrid.cjs",
   "module": "dist/screengrid.mjs",
@@ -8,8 +8,8 @@
   "jsdelivr": "dist/screengrid.umd.min.js",
   "type": "module",
   "scripts": {
-    "start": "python3 -m http.server 8000",
-    "dev": "python3 -m http.server 8000",
+    "start": "npx http-server -p 8000",
+    "dev": "npx http-server -p 8000",
     "build": "rollup -c",
     "prepublishOnly": "npm run build",
     "test": "echo 'Open examples/simple-test.html in your browser'"

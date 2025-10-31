@@ -156,6 +156,16 @@ Called for each cell when `enableGlyphs` is true. Receives:
 
 The library supports custom glyph drawing through the `onDrawCell` callback. This allows you to create rich visualizations that go beyond simple color encoding.
 
+📖 **For comprehensive glyph drawing documentation, see [GLYPH_DRAWING_GUIDE.md](./GLYPH_DRAWING_GUIDE.md)**
+
+The guide covers:
+- Understanding the `onDrawCell` callback
+- All built-in glyph utilities
+- Custom glyph implementation
+- Multivariate data visualization patterns
+- Time series visualization
+- Advanced patterns and best practices
+
 ### Built-in Glyph Utilities
 
 The library includes several utility methods for common glyph patterns:
@@ -172,6 +182,9 @@ ScreenGridLayerGL.drawPieGlyph(ctx, x, y, values, radius, colors);
 
 // Scatter plot glyph
 ScreenGridLayerGL.drawScatterGlyph(ctx, x, y, points, cellSize, color);
+
+// Time series glyph (v2.0.0+)
+GlyphUtilities.drawTimeSeriesGlyph(ctx, x, y, timeSeriesData, cellSize, options);
 ```
 
 ### Custom Glyph Example
