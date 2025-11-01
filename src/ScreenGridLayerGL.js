@@ -12,6 +12,7 @@ import { Renderer } from './canvas/Renderer.js';
 import { EventBinder } from './events/EventBinder.js';
 import { EventHandlers } from './events/EventHandlers.js';
 import { GlyphUtilities } from './glyphs/GlyphUtilities.js';
+import { GlyphRegistry } from './glyphs/GlyphRegistry.js';
 
 export class ScreenGridLayerGL {
   /**
@@ -212,10 +213,34 @@ export class ScreenGridLayerGL {
    */
   _draw() {
     const ctx = this.canvasManager.getContext();
+    // Determine the onDrawCell behavior. Priority:
+    // 1. user-provided onDrawCell callback
+    // 2. registered glyph via `config.glyph` (uses GlyphRegistry)
+    // 3. no onDrawCell -> color-mode rendering
+
+    let onDrawCell = this.config.onDrawCell || null;
+
+    if (!onDrawCell && this.config.glyph) {
+      const plugin = GlyphRegistry.get(this.config.glyph);
+      if (plugin && typeof plugin.draw === 'function') {
+        // Wrap plugin.draw to match the onDrawCell signature and pass glyphConfig
+        const glyphCfg = this.config.glyphConfig || {};
+        onDrawCell = (ctxArg, x, y, normVal, cellInfo) => {
+          try {
+            plugin.draw(ctxArg, x, y, normVal, cellInfo, glyphCfg);
+          } catch (e) {
+            console.error(`Glyph plugin "${this.config.glyph}" threw an error:`, e);
+          }
+        };
+      } else {
+        console.warn(`Glyph "${this.config.glyph}" not found in GlyphRegistry`);
+      }
+    }
+
     const config = {
       colorScale: this.config.colorScale,
-      enableGlyphs: this.config.enableGlyphs,
-      onDrawCell: this.config.onDrawCell,
+      enableGlyphs: this.config.enableGlyphs || Boolean(onDrawCell),
+      onDrawCell: onDrawCell,
       glyphSize: this.config.glyphSize,
     };
 
